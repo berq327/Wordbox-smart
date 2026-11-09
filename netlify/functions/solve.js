@@ -1,4 +1,3 @@
-
 'use strict';
 
 const HEADERS = {
@@ -8,13 +7,11 @@ const HEADERS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS'
 };
 
-function reply(statusCode, data) {
-  return {
-    statusCode,
-    headers: HEADERS,
-    body: JSON.stringify(data)
-  };
-}
+const reply = (statusCode, data) => ({
+  statusCode,
+  headers: HEADERS,
+  body: JSON.stringify(data)
+});
 
 function normalize(value) {
   return String(value || '')
@@ -24,8 +21,10 @@ function normalize(value) {
     .replace(/ى/g, 'ي');
 }
 
-// القاموس المساعد
-const DICTIONARY = `
+// قائمة كلمات عربية شائعة وواضحة.
+// لا نقبل اقتراحات الذكاء الاصطناعي العشوائية
+// إلا إذا كانت موجودة في هذه القائمة.
+const WORDS = `
 سلام كلام كتاب كاتب مكتب مكتبة كلمة كلمات
 ملك ملكة ملكي ملوك مالك ملكات
 بلاد بلدي بلاط طالب طلبت طلاب
@@ -33,21 +32,21 @@ const DICTIONARY = `
 اكلت اكلة شربت شراب شارب
 لبنة لباس لابس لحمة نهار بحار جبال جمال
 جميل جميلة جملة نجمة نجوم
-نبهت تنبه منبه نبذل نبات
+نبهت تنبه منبه نبات
 ذهبت ذهبي بذرة ذنوب
-خبير خبرة خمنت خدمت خادم خدمة خرجت خروج
+خبير خبرة خدمت خادم خدمة خرجت خروج
 دخلت دخول داخل مدخل خليط خلطة خلاص خالة
-شتمت شتمه شامل شمال شمعة شموع شجرة
+شامل شمال شمعة شموع شجرة
 شاعر شعور شعاع شكرت شاكر شكور شرحت
 شارع شرطة شريط
-صبرت صابر صبور صامت سكتت ساكت سكوت صوتي
+صبرت صابر صبور صامت ساكت سكوت صوتي
 صورة صيام صائم صلاة صادق صديق صاحب صحبة
 صدمة صنعت صانع صنعة
 صغير صغيرة قصير قصيرة قصور
 قمري قلبي قلبك قلوب قالت قائل مقال مقالة
 قرار قرية قريب قريبة كريم كريمة
 كبيرة كبرت كسرت كاسب كسبت
-كلام كتابي كاتب كتبت مكاتب
+كتابي كتبت مكاتب
 كلبة كلاب كرات كرسي ليلة ليالي لوني لونك
 لعبة لعبت لاعب ملعب ملابس
 علوم علامة معلم معلمة تعلم تعلمت تعليم
@@ -75,7 +74,7 @@ const DICTIONARY = `
 ورقة وزير وزارة وصلت وعدت وجدت وجهة
 ولدي ولادة والد والدة وقفت يومي
 سنين شهور اسبوع ساعة ساعات مساء صباح
-بداية بدأت بديل بعيد قريبة منزل منازل
+بداية بدأت بديل بعيد منزل منازل
 مدينة مكان مساحة مسحت سكنت ساكن
 سيارة سافر سفينة درست دروس دراسة
 مدرس مدرسة مدارس نجاح نجحت خسارة خسرت
@@ -92,27 +91,37 @@ const DICTIONARY = `
 جانب داخل خارج طويل طويلة قصير قصيرة
 كبير كبيرة صغير صغيرة سريع سريعة بطيئة
 قوية ضعيف ضعيفة صعبة سهلة
-جميل جميلة نظيف نظيفة نظرت ناظر
-واضح واضحة صحيح صحيحة
-ممكن قادر اكيد افضل احسن
-اكثر كثيرة قليل قليلة حقيقي حقيقة صادق
+نظيف نظيفة نظرت ناظر واضح واضحة
+صحيح صحيحة ممكن قادر اكيد افضل احسن
+اكثر كثيرة قليل قليلة حقيقي حقيقة
 صالح صالحة فرحة سعيد سعيدة حزين حزينة
-خافت امين امينة احلام محبوب حبيب
+امين امينة احلام محبوب حبيب
 محبة ناجح نجاح
 مريم مرمر مرير مرارة رمان رمانة مرام
-قرار قليل قليلة قرارك مقرر تقرير تقارير
-قلمك قلمنا مقال مقالة مرقم مرقمة
-منزل منازل نملة نملية ارقام رقمية
-ملامح ملامسة
+مقرر تقرير تقارير
+قلمك قلمنا مرقم مرقمة
+نملة ارقام رقمية ملامح
 `.trim().split(/\s+/u);
 
-// كل خانة قد تحتوي حرفًا أو حرفين
+const DICTIONARY = new Map();
+
+for (const word of WORDS) {
+  const key = normalize(word);
+
+  if (key.length >= 4 && key.length <= 6) {
+    if (!DICTIONARY.has(key)) {
+      DICTIONARY.set(key, word);
+    }
+  }
+}
+
+// تجهيز الشبكة
 function prepareGrid(parsed) {
   let grid = parsed.grid;
   let rows = Number(parsed.rows);
   let cols = Number(parsed.cols);
 
-  if (!Array.isArray(grid)) {
+  if (!Array.isArray(grid) || !grid.length) {
     throw new Error('لم يتم التعرف على الشبكة');
   }
 
@@ -165,84 +174,93 @@ function prepareGrid(parsed) {
     )
   ) {
     throw new Error(
-      'بعض الخانات غير واضحة. جرّب صورة أقرب.'
+      'بعض الحروف غير واضحة. جرّب صورة أقرب.'
     );
   }
 
-  return {grid, rows, cols};
+  return { grid, rows, cols };
 }
 
-// التحقق من المسار الحقيقي
-// الخانة المكونة من حرفين تُستخدم كوحدة واحدة
-function pathExists(word, grid, rows, cols) {
-  const target = normalize(word);
+// بناء فهرس للكلمات حتى لا نبحث عشوائيًا
+const PREFIXES = new Set();
 
-  if (
-    [...target].length < 4 ||
-    [...target].length > 6
-  ) {
-    return false;
+for (const word of DICTIONARY.keys()) {
+  for (let i = 1; i <= word.length; i++) {
+    PREFIXES.add(word.slice(0, i));
   }
+}
 
+// استخراج الكلمات من المسارات الحقيقية فقط
+function findWords(grid, rows, cols) {
   const cells = grid.map(normalize);
-  const used = new Set();
+  const found = new Map();
 
-  function walk(position, offset) {
-    if (offset === target.length) {
-      return true;
-    }
+  const neighbors = cells.map((_, index) => {
+    const row = Math.floor(index / cols);
+    const col = index % cols;
+    const result = [];
 
-    for (let next = 0; next < cells.length; next++) {
-      if (used.has(next)) continue;
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
 
-      const cell = cells[next];
+        const nr = row + dr;
+        const nc = col + dc;
 
-      if (!target.startsWith(cell, offset)) {
-        continue;
-      }
-
-      if (position !== -1) {
-        const row1 = Math.floor(position / cols);
-        const col1 = position % cols;
-        const row2 = Math.floor(next / cols);
-        const col2 = next % cols;
-
-        const dr = Math.abs(row1 - row2);
-        const dc = Math.abs(col1 - col2);
-
-        if (dr > 1 || dc > 1) {
-          continue;
+        if (
+          nr >= 0 &&
+          nr < rows &&
+          nc >= 0 &&
+          nc < cols
+        ) {
+          result.push(nr * cols + nc);
         }
       }
-
-      used.add(next);
-
-      if (
-        walk(
-          next,
-          offset + cell.length
-        )
-      ) {
-        return true;
-      }
-
-      used.delete(next);
     }
 
-    return false;
+    return result;
+  });
+
+  function walk(index, text, used) {
+    const current = text + cells[index];
+
+    if (current.length > 6) return;
+    if (!PREFIXES.has(current)) return;
+
+    const word = DICTIONARY.get(current);
+
+    if (word && current.length >= 4) {
+      found.set(current, word);
+    }
+
+    for (const next of neighbors[index]) {
+      const bit = 1n << BigInt(next);
+
+      if ((used & bit) !== 0n) continue;
+
+      walk(
+        next,
+        current,
+        used | bit
+      );
+    }
   }
 
-  return walk(-1, 0);
-}
-
-function parseAI(content) {
-  try {
-    return JSON.parse(content);
-  } catch (_) {
-    throw new Error(
-      'لم تكتمل قراءة الصورة. حاول بصورة أوضح.'
+  for (let i = 0; i < cells.length; i++) {
+    walk(
+      i,
+      '',
+      1n << BigInt(i)
     );
   }
+
+  return [...found.values()]
+    .sort((a, b) =>
+      b.length - a.length ||
+      a.localeCompare(b, 'ar')
+    )
+    .slice(0, 10)
+    .map(word => ({ word }));
 }
 
 exports.handler = async event => {
@@ -282,71 +300,53 @@ exports.handler = async event => {
 
     timer = setTimeout(
       () => controller.abort(),
-      10000
+      15000
     );
 
     const prompt = `
-أنت متخصص في قراءة لعبة Wordbox العربية.
+أنت متخصص في قراءة شبكة لعبة Wordbox العربية.
 
-اقرأ شبكة الدوائر من الصورة بدقة.
+مهمتك الوحيدة هي استخراج الشبكة بدقة.
 
 قد تكون الشبكة:
 4×4 أو 5×5 أو 4×6 أو 6×4
-أو أي حجم مستطيل واضح.
+أو شبكة مستطيلة أخرى.
 
-عد الصفوف والأعمدة من الصورة نفسها.
+اقرأ عدد الصفوف والأعمدة من الصورة.
 
-انتبه جدًا:
-بعض الدوائر تحتوي حرفين عربيين
-مثل "نم" أو "لا".
+تجاهل أسماء اللاعبين والنتائج
+والوقت والنصوص خارج الشبكة.
+
+اقرأ كل صف من يسار الصورة إلى يمينها.
+ثم انتقل إلى الصف التالي.
+
+بعض الدوائر تحتوي حرفين مثل:
+"نم" أو "لا".
 
 هذه دائرة واحدة وليست دائرتين.
+احفظ محتواها كما يظهر.
 
-احفظ الحرفين بالترتيب الظاهر
-داخل الخانة نفسها.
+لا تخمن الحروف غير الواضحة.
+إذا لم تتمكن من قراءة خانة،
+ضع علامة ? بدلًا من اختراع حرف.
 
-تجاهل أسماء اللاعبين والنصوص
-والنتائج خارج الشبكة.
-
-اقرأ كل صف من يسار الصورة
-إلى يمينها، ثم انتقل للصف التالي.
-
-أعد JSON فقط بهذه البنية:
+أرجع JSON فقط بهذا الشكل:
 
 {
-  "rows": 5,
-  "cols": 5,
   "grid": [
     ["ل","ق","ر","م","ل"],
     ["ا","ا","د","ا","ر"],
     ["ك","نم","ص","ي","ا"],
     ["ة","ل","ل","ف","م"],
     ["ث","ا","ن","ا","ض"]
-  ],
-  "words": ["كلمة"]
+  ]
 }
 
-هذا المثال يوضح شكل البيانات فقط.
-اقرأ الحروف الحقيقية من الصورة،
-ولا تنسخ المثال إلا إذا كان مطابقًا لها.
+المثال للتوضيح فقط.
+لا تنسخه إذا كانت الصورة مختلفة.
 
-بعد قراءة الشبكة:
-اقترح حتى 30 كلمة عربية حقيقية
-من 4 أو 5 أو 6 حروف فقط.
-
-يجب أن تكون كل خانة متصلة
-بالخانة التالية أفقيًا أو عموديًا
-أو قطريًا.
-
-إذا احتوت الخانة حرفين،
-يجب استخدام الحرفين معًا
-وبنفس الترتيب.
-
-لا تستخدم الخانة مرتين في الكلمة.
-
-لا تكتب مسارات ولا شرحًا.
-
-أرجع JSON صالحًا فقط.
+لا تقترح كلمات.
+لا تكتب أي شرح.
 `;
 
     const response = await fetch(
@@ -362,7 +362,7 @@ exports.handler = async event => {
         body: JSON.stringify({
           model: 'gpt-4.1-mini',
           temperature: 0,
-          max_tokens: 1500,
+          max_tokens: 700,
           response_format: {
             type: 'json_object'
           },
@@ -386,17 +386,7 @@ exports.handler = async event => {
       }
     );
 
-    const rawText = await response.text();
-
-    let api;
-
-    try {
-      api = JSON.parse(rawText);
-    } catch (_) {
-      throw new Error(
-        'خدمة الصور أرجعت ردًا غير مكتمل'
-      );
-    }
+    const api = await response.json();
 
     if (!response.ok) {
       throw new Error(
@@ -414,57 +404,17 @@ exports.handler = async event => {
       );
     }
 
-    const parsed = parseAI(content);
-    const {grid, rows, cols} = prepareGrid(parsed);
+    const parsed = JSON.parse(content);
+    const { grid, rows, cols } = prepareGrid(parsed);
 
-    const aiWords = Array.isArray(parsed.words)
-      ? parsed.words
-      : [];
-
-    const candidates = [
-      ...aiWords,
-      ...DICTIONARY
-    ];
-
-    const seen = new Set();
-    const words = [];
-
-    for (const item of candidates) {
-      const word = String(item || '')
-        .trim()
-        .replace(/[\u064B-\u065F\u0670\u0640]/g, '');
-
-      const key = normalize(word);
-
-      if (
-        !/^[\u0621-\u064A]{4,6}$/u.test(word) ||
-        seen.has(key)
-      ) {
-        continue;
-      }
-
-      seen.add(key);
-
-      if (
-        pathExists(word, grid, rows, cols)
-      ) {
-        words.push({word});
-      }
-    }
-
-    words.sort(
-      (a, b) =>
-        [...b.word].length -
-        [...a.word].length ||
-        a.word.localeCompare(b.word, 'ar')
-    );
+    const words = findWords(grid, rows, cols);
 
     return reply(200, {
       rows,
       cols,
       grid,
-      words: words.slice(0, 10),
-      note: 'تم التحقق من اتصال الخانات'
+      words,
+      note: 'الكلمات مأخوذة من القاموس وتم التحقق من مساراتها'
     });
 
   } catch (error) {
@@ -472,7 +422,7 @@ exports.handler = async event => {
       error.name === 'AbortError' ? 504 : 422,
       {
         error: error.name === 'AbortError'
-          ? 'انتهت مهلة التحليل. جرّب صورة أصغر.'
+          ? 'انتهت مهلة التحليل. جرّب صورة أوضح.'
           : error.message
       }
     );
