@@ -12,20 +12,19 @@ const send = (statusCode, data) => ({
   body: JSON.stringify(data)
 });
 
-// قاموس إضافي للمراحل الصعبة
-const DICTIONARY = `
+// قاموس موسع للمراحل الصعبة
+const WORDS = `
 نبذل نبهت نبهه نبهنا تنبه تنبيه منبه منهل نهمل تمهل تهمل مهمل
-شوهت شوهه شتمه شتمهن خمنت خمنه خمنوا نبتت ينبت تنبت منبت
+شوهت شوهه شتمه شتمهن خمنت خمنه نبتت ينبت تنبت منبت
 نبيل نبيه نبل نذل بذل بذلة بذور ذهب ذهبي هبة هبات هبط هبوط
 خجل خجول خجلة خجلت جبل جبال جبلي جبهة جبين بهجة بهيج
 نجم نجمة نجمك جمل جمال جملة جملها جميل جميلة مجمل
-عنب عنبة عنبك نبع منبع ينبع ينابيع نبت نبات نباتي نباتات
+عنب عنبة عنبك منبع ينبع نبت نبات نباتي نباتات
 لبن لبنة لبني لبنك لحم لحمة لحوم ملح مالح ملحة ملاحة
 همل مهملة مهملات خبل خبال خبير خبرة خبرك خبري اخبار
 شمل شامل شمال شمول مشمول شمعة شموع شمسي شمسك
 منجم منجمة منجمك منهج مناهج نهج نهجة ناهج
 بلوغ بالغ بالغة مبلغ مبالغ بلغنا بلغه بلغوا
-نمو نموه نموك نموها نموت نموا منوم
 هجوم هاجم هاجمت مهاجم مهاجمة هجمة هجمات
 ميلاد لباس سلام كلام كلامي كتاب كتابي كاتب مكتب مكاتب مكتبة
 مدرس مدرسة مدارس دراسة دارس دروس طالب طلاب طلبات طالبات
@@ -96,6 +95,77 @@ const DICTIONARY = `
 حليب حلوى حلوة حلوين حلاوة حلويات
 غزال غزالة غالي غالية غناء اغاني
 صباح صبحي صباحي مصباح مصابيح
+مبنى مباني بنية بنين ابناء ابنك ابني
+معنى معاني معنى مبين بيان بياني
+قلبك قلبه قلبها قلبنا قلوبك
+علمك علمه علمنا تعلم تعلمت تعليم
+عملك عمله عملنا يعمل يعملون عمال
+حمل حمله حملنا تحمل يتحمل حمول
+منح منحة منحك منحها يمنح منحت
+مسح مسحة مسحت يمسح ممسحة
+بحث بحثت باحث بحثنا يبحث ابحاث
+فتح فتحت يفتح فتحة مفتوح
+جمع جمعت يجمع جامعة جامع
+صنع صنعت يصنع صنعة صانع
+سمع سمعت يسمع سامع اسمع
+وصف وصفت يصف وصفه اوصاف
+وعد وعدت يوعد موعد مواعيد
+وصل وصلت يوصل وصلة موصل
+وصلت توصل وصول مواصل
+نزل نزلت ينزل منزل منازل
+ذهب ذهبت يذهب مذهب مذاهب
+كتب كتبت يكتب مكتوب مكتبة
+دخل دخلت يدخل مداخل مدخل
+خرج خرجت يخرج مخرج مخارج
+غسل غسلت يغسل غسلة مغسل
+لبس لبست يلبس ملبس ملبوس
+ركب ركبت يركب مركب مركبة
+رسم رسمت يرسم رسمة رسام
+حفظ حفظت يحفظ حافظ محفوظ
+حضر حضرت يحضر حاضر حضور
+خدم خدمت يخدم خادم خدمة
+شكر شكرت يشكر شاكر مشكور
+صبر صبرت يصبر صابر صبور
+قدر قدرت يقدر قادر مقدور
+كسر كسرت يكسر كاسر مكسور
+جبر جبرت يجبر جابر مجبور
+قتل قتلت يقتل قاتل مقتول
+وقف وقفت يوقف واقف موقوف
+نظر نظرت ينظر ناظر منظور
+نطق نطقت ينطق ناطق منطوق
+شرح شرحت يشرح شارح مشروح
+ترك تركت يترك تارك متروك
+طلب طلبت يطلب طالب مطلوب
+نشر نشرت ينشر ناشر منشور
+حكم حكمت يحكم حاكم محكوم
+صمت صمتت يصمت صامت صمته
+سكت سكتت يسكت ساكت سكوت
+فهم فهمت يفهم فاهم مفهوم
+حلم حلمت يحلم حالم احلام
+عرف عرفت يعرف عارف معروف
+فرح فرحت يفرح فرحة فرحان
+نجح نجحت ينجح ناجح نجاح
+خسر خسرت يخسر خاسر خسارة
+ربح ربحت يربح رابح ارباح
+كسب كسبت يكسب كاسب مكسب
+حسب حسبت يحسب حاسب محسوب
+لعب لعبت يلعب لاعب ملعب
+شرب شربت يشرب شارب مشروب
+اكل اكلت ياكل اكلها ماكل
+عاش عاشت يعيش معيشة
+مشى مشيت يمشي ماشية
+مات ماتت يموت اموات
+عاد عادت يعود عودة عوائد
+قال قالت يقول قائل مقالة
+باع باعت يبيع بائع مبيع
+نام نامت ينام نائم منام
+طار طارت يطير طائر طيران
+قام قامت يقوم قائم مقام
+زار زارت يزور زائر زيارة
+خاف خافت يخاف خائف مخاوف
+مال مالت يميل مائل ميول
+دار دارت يدور دائرة دوائر
+فاز فازت يفوز فائز فوزها
 `.trim().split(/\s+/u);
 
 const norm = value => String(value)
@@ -105,30 +175,31 @@ const norm = value => String(value)
   .replace(/ى/g, 'ي');
 
 function findPath(word, grid) {
-  const chars = [...norm(word)];
+  const letters = [...norm(word)];
   const cells = grid.map(norm);
 
-  if (chars.length < 4 || chars.length > 5) {
+  if (letters.length !== 4 && letters.length !== 5) {
     return null;
   }
 
-  function visit(path, used) {
-    if (path.length === chars.length) return path;
+  function walk(path, used) {
+    if (path.length === letters.length) return path;
 
     for (let i = 0; i < 16; i++) {
       if ((used & (1 << i)) ||
-          cells[i] !== chars[path.length]) continue;
+          cells[i] !== letters[path.length]) continue;
 
       if (path.length) {
-        const j = path[path.length - 1];
+        const last = path[path.length - 1];
 
         if (
-          Math.abs(Math.floor(i / 4) - Math.floor(j / 4)) > 1 ||
-          Math.abs((i % 4) - (j % 4)) > 1
+          Math.abs(Math.floor(i / 4) -
+                   Math.floor(last / 4)) > 1 ||
+          Math.abs(i % 4 - last % 4) > 1
         ) continue;
       }
 
-      const result = visit(
+      const result = walk(
         [...path, i],
         used | (1 << i)
       );
@@ -139,7 +210,7 @@ function findPath(word, grid) {
     return null;
   }
 
-  return visit([], 0);
+  return walk([], 0);
 }
 
 exports.handler = async event => {
@@ -152,7 +223,9 @@ exports.handler = async event => {
   }
 
   if (!process.env.OPENAI_API_KEY) {
-    return send(503, {error: 'مفتاح OpenAI غير موجود'});
+    return send(503, {
+      error: 'مفتاح OpenAI غير موجود'
+    });
   }
 
   let timer;
@@ -166,51 +239,49 @@ exports.handler = async event => {
       image.length > 7500000
     ) {
       return send(400, {
-        error: 'الصورة غير صالحة أو كبيرة جدًا'
+        error: 'ارفع لقطة شاشة واضحة بحجم أصغر'
       });
     }
 
     const controller = new AbortController();
 
-    // 8.8 ثوانٍ للطلب، والباقي لمعالجة النتيجة
     timer = setTimeout(
       () => controller.abort(),
       8800
     );
 
+    // الذكاء الاصطناعي يقرأ الحروف فقط.
     const prompt = `
-أنت محلل لعبة Wordbox العربية للمراحل الصعبة.
+اقرأ فقط 16 حرفا داخل شبكة لعبة
+Wordbox العربية 4x4.
 
-اقرأ شبكة الدوائر 4×4 في الصورة،
-حتى لو كانت داخل لقطة شاشة لهاتف.
+أرجع JSON فقط بالشكل:
+{
+ "grid":["س","ب","ط","ب",
+         "ا","خ","ل","ا",
+         "ل","ا","م","ي",
+         "د","ه","ص","ج"],
+ "bounds":{
+   "left":0.1,
+   "right":0.9,
+   "top":0.4,
+   "bottom":0.8
+ }
+}
 
-أرجع JSON فقط بالمفاتيح:
-grid وbounds وcandidates.
+الحروف والأرقام في المثال ليست الحل.
 
-grid:
-مصفوفة 16 حرفًا بالضبط، من يسار الصورة
-إلى يمينها صفًا صفًا من الأعلى للأسفل.
-لا تخلط بين النص خارج الدوائر والحروف.
+استخرج الحروف الحقيقية من دوائر الشبكة،
+من يسار الصورة ليمينها صفا صفا
+من الأعلى للأسفل.
 
-bounds:
-كائن مثل
-{"left":0.1,"right":0.9,"top":0.3,"bottom":0.8}
-لكن استبدل الأرقام بمراكز دوائر العمود
-الأول والأخير والصف الأول والأخير
-كنسب من عرض وارتفاع الصورة الكاملة.
-لا تستخدم قيم المثال.
+bounds نسب مراكز أول وآخر عمود
+وأول وآخر صف إلى عرض وارتفاع
+الصورة الكاملة.
 
-candidates:
-حتى 75 كلمة عربية من 4 أو 5 أحرف فقط.
-ابحث عن الأفعال بصيغها والأسماء والصفات
-والكلمات غير الشائعة.
-لا تكتف بالكلمات السهلة.
-
-يجب أن يكون لكل كلمة مسار عبر خانات
-متجاورة أفقيًا أو رأسيًا أو قطريًا،
-دون تكرار خانة.
-
-لا تخترع حروفًا ولا تكتب شرحًا.
+تجاهل الكلام خارج الشبكة.
+لا تبحث عن كلمات ولا تشرح.
+إذا لم يتضح حرف اكتب ?.
 `;
 
     const response = await fetch(
@@ -226,7 +297,7 @@ candidates:
         body: JSON.stringify({
           model: 'gpt-4.1-mini',
           temperature: 0,
-          max_tokens: 1700,
+          max_tokens: 260,
           response_format: {
             type: 'json_object'
           },
@@ -247,16 +318,16 @@ candidates:
       }
     );
 
-    const raw = await response.json();
+    const data = await response.json();
 
     if (!response.ok) {
       throw new Error(
-        raw.error?.message || 'فشل التحليل'
+        data.error?.message || 'فشل قراءة الصورة'
       );
     }
 
     const parsed = JSON.parse(
-      raw.choices?.[0]?.message?.content || '{}'
+      data.choices?.[0]?.message?.content || '{}'
     );
 
     if (
@@ -264,19 +335,19 @@ candidates:
       parsed.grid.length !== 16
     ) {
       throw new Error(
-        'لم أتمكن من قراءة شبكة 4×4'
+        'تعذر قراءة 16 حرفا؛ ارفع لقطة أوضح'
       );
     }
 
     const grid = parsed.grid.map(
-      x => [...String(x || '?').trim()][0] || '?'
+      v => [...String(v || '?').trim()][0] || '?'
     );
 
     if (grid.some(
-      x => !/^[\u0621-\u064A]$/u.test(x)
+      c => !/^[\u0621-\u064A]$/u.test(c)
     )) {
       throw new Error(
-        'بعض الحروف غير واضحة، ارفع صورة أوضح'
+        'حرف غير واضح؛ صور الشبكة كاملة بدون إشعارات'
       );
     }
 
@@ -289,7 +360,7 @@ candidates:
       bottom: Number(b.bottom)
     };
 
-    const goodBounds =
+    const validBounds =
       Object.values(bounds).every(
         n => Number.isFinite(n) &&
              n >= 0 && n <= 1
@@ -300,24 +371,11 @@ candidates:
     const words = [];
     const seen = new Set();
 
-    const candidates = [
-      ...(Array.isArray(parsed.candidates)
-        ? parsed.candidates : []),
-      ...DICTIONARY
-    ];
-
-    for (const candidate of candidates) {
-      const word = String(candidate)
-        .trim()
-        .replace(/[\u064B-\u065F\u0670\u0640]/g, '');
-
+    for (const candidate of WORDS) {
+      const word = String(candidate).trim();
       const key = norm(word);
 
-      if (
-        seen.has(key) ||
-        !/^[\u0621-\u064A]{4,5}$/u.test(word)
-      ) continue;
-
+      if (seen.has(key)) continue;
       seen.add(key);
 
       const path = findPath(word, grid);
@@ -335,20 +393,20 @@ candidates:
 
     return send(200, {
       grid,
-      bounds: goodBounds ? bounds : null,
-      words: words.slice(0, 30),
+      bounds: validBounds ? bounds : null,
+      words: words.slice(0, 35),
       note: words.length < 10
-        ? 'وجدنا أقل من 10 كلمات بمسارات متصلة.'
-        : 'المسارات متصلة، لكن قبول اللعبة غير مضمون.'
+        ? 'لم نجد 10 كلمات في القاموس لهذه الشبكة.'
+        : 'تم التحقق من اتصال المسارات على الحروف المقروءة، وقبول اللعبة غير مضمون.'
     });
 
-  } catch (error) {
+  } catch (err) {
     return send(
-      error.name === 'AbortError' ? 504 : 422,
+      err.name === 'AbortError' ? 504 : 422,
       {
-        error: error.name === 'AbortError'
-          ? 'انتهت مهلة 9 ثوانٍ، حاول بصورة أوضح أو أصغر.'
-          : error.message
+        error: err.name === 'AbortError'
+          ? 'تجاوزت قراءة الصورة 9 ثوان؛ ارفع لقطة شاشة مباشرة وأصغر.'
+          : err.message
       }
     );
   } finally {
