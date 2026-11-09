@@ -5,19 +5,19 @@ const HEADERS = {
   'Content-Type': 'application/json; charset=utf-8',
   'Access-Control-Allow-Origin': '*'
 };
-
-const send = (statusCode, body) => ({
+const respond = (statusCode, data) => ({
   statusCode,
   headers: HEADERS,
-  body: JSON.stringify(body)
+  body: JSON.stringify(data)
 });
 
-const DICTIONARY = `
-ميلاد لباس سلام كلام كلامي كتاب كتابي كاتب مكتب مكتبة
+// كلمات عربية، ولن تظهر إلا إذا كان لها مسار متصل.
+const WORDS = `
+ميلاد لباس سلام كلام كلامي كتاب كتابي كاتب مكتب مكاتب مكتبة
 مدرس مدرسة مدارس دراسة دارس دروس طالب طلاب طلبات
-رسالة رسائل رسام طريق شارع شوارع سيارة سيارات
-سماع سحاب سحابة سلاح سليم سعيدة سعيد صباح مساء
-نهار نهائي نهاية بداية بعيد بعيدة قريب قريبة
+رسالة رسائل رسام طريق طرقات شارع شوارع سيارة سيارات
+سماع سحاب سحابة سلاح سليم سعيد صباح مساء
+نهار نهاية بداية بعيد بعيدة قريب قريبة
 غريب غريبة غياب حياة حيوان حديقة حدائق حدود
 حديث حديد جديد جديدة قديم قديمة قيمة قلوب
 قلبي عالم عالمي علوم علماء علامة علامات
@@ -80,107 +80,84 @@ const DICTIONARY = `
 فائز فائزة موسم مواسم موسمي يومك
 يومي ايام يومية يومين اسبوع اسابيع
 شهور شهرية شهري سنين سنة سنوات
+شمال جنوب شرقي غربي يمين يسار وسطى
+سؤال جواب دخول خروج خالد خليل خيال
+ملاح ملاحة مالح ملحك لحام لحظة لحظات
+جمال جملة جميل جميلة مجمل مجالي
+نبات نباتي نباتات نباتي ثابت ثبات
+حليب حلوى حلوة حلوين حلاوة حلويات
+غزال غزالة غالي غالية غناء اغاني
+صباح صبحي صباحي مصباح مصابيح
+اخبار خبرك خبري خبرة خبير
 `.trim().split(/\s+/u);
 
-const norm = value => String(value)
+const normalize = value => String(value)
   .normalize('NFC')
   .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
   .replace(/[أإآٱ]/g, 'ا')
   .replace(/ى/g, 'ي');
 
-function trace(word, grid) {
-  const letters = [...norm(word)];
+function findPath(word, grid) {
+  const letters = [...normalize(word)];
+  const cells = grid.map(normalize);
   if (letters.length < 4 || letters.length > 5) return null;
 
-  const cells = grid.map(norm);
-
-  function search(path, used) {
+  function walk(path, mask) {
     if (path.length === letters.length) return path;
 
     for (let i = 0; i < 16; i++) {
-      if (used.has(i)) continue;
-      if (cells[i] !== letters[path.length]) continue;
+      if ((mask & (1 << i)) ||
+          cells[i] !== letters[path.length]) continue;
 
       if (path.length) {
         const last = path[path.length - 1];
-        const rowDistance = Math.abs(
-          Math.floor(i / 4) - Math.floor(last / 4)
-        );
-        const colDistance = Math.abs(
-          (i % 4) - (last % 4)
-        );
-
-        if (rowDistance > 1 || colDistance > 1) continue;
+        if (
+          Math.abs(Math.floor(i / 4) -
+                   Math.floor(last / 4)) > 1 ||
+          Math.abs(i % 4 - last % 4) > 1
+        ) continue;
       }
 
-      used.add(i);
-      const result = search([...path, i], used);
-      if (result) return result;
-      used.delete(i);
+      const found = walk([...path, i], mask | (1 << i));
+      if (found) return found;
     }
-
     return null;
   }
 
-  return search([], new Set());
+  return walk([], 0);
 }
 
 exports.handler = async event => {
-  if (event.httpMethod !== 'POST') {
-    return send(405, { error: 'POST only' });
-  }
+  if (event.httpMethod === 'OPTIONS') return respond(200, {});
+  if (event.httpMethod !== 'POST')
+    return respond(405, {error: 'POST only'});
 
-  if (!process.env.OPENAI_API_KEY) {
-    return send(503, { error: 'مفتاح OpenAI غير موجود' });
-  }
+  if (!process.env.OPENAI_API_KEY)
+    return respond(503, {error: 'OPENAI_API_KEY غير موجود'});
 
-  let timeout;
+  let timer;
 
   try {
-    const { image } = JSON.parse(event.body || '{}');
+    const {image} = JSON.parse(event.body || '{}');
 
     if (
       typeof image !== 'string' ||
       !/^data:image\/(png|jpeg|webp);base64,/.test(image) ||
       image.length > 7500000
     ) {
-      return send(400, { error: 'الصورة غير صالحة أو كبيرة جدًا' });
+      return respond(400, {
+        error: 'الصورة غير صالحة أو كبيرة جدًا'
+      });
     }
 
     const controller = new AbortController();
-    timeout = setTimeout(() => controller.abort(), 7500);
+    timer = setTimeout(() => controller.abort(), 9000);
 
-    const prompt = `
-حلل لقطة شاشة لعبة Wordbox العربية، شبكة 4×4.
-
-أرجع JSON فقط:
-{
- "grid":["س","ب","ط","ب","ا","خ","ل","ا","ل","ا","م","ي","د","ه","ص","ج"],
- "bounds":{"left":0.1,"right":0.9,"top":0.4,"bottom":0.8},
- "candidates":["كلمة"]
-}
-
-هذه الحروف مجرد مثال للشكل المطلوب، وليست الحل.
-اقرأ الحروف الحقيقية من الصورة.
-
-القواعد:
-1. grid يحتوي بالضبط 16 حرفًا.
-2. رتب الحروف من يسار الصورة إلى يمينها،
-   صفًا بعد صف من الأعلى للأسفل.
-3. bounds تحدد مراكز دوائر الحروف:
-   left مركز العمود الأيسر،
-   right مركز العمود الأيمن،
-   top مركز الصف الأعلى،
-   bottom مركز الصف الأسفل.
-4. الإحداثيات نسب بين 0 و1 من أبعاد الصورة الكاملة.
-5. اقترح أكبر عدد ممكن من الكلمات العربية
-   الحقيقية من 4 أو 5 حروف.
-6. لا يجوز الانتقال إلا لخانة مجاورة،
-   أفقيًا أو عموديًا أو قطريًا.
-7. لا تستخدم نفس الخانة مرتين في الكلمة.
-8. إذا لم تستطع قراءة حرف فاكتب ?.
-9. لا تضف أي شرح خارج JSON.
-`;
+    const prompt = `اقرأ شبكة الحروف العربية 4×4 في لقطة لعبة Wordbox. أجب JSON فقط بهذه المفاتيح:
+"grid": مصفوفة 16 حرفا بترتيب الصفوف من يسار الصورة إلى يمينها، من الأعلى للأسفل.
+"bounds": كائن {"left":0.0,"right":1.0,"top":0.0,"bottom":1.0} لكن استبدل القيم بمواقع مراكز أول وآخر أعمدة وصفوف دوائر الحروف الحقيقية كنسب من عرض وارتفاع الصورة الكاملة. لا تستخدم حدود اللوحة؛ استخدم مراكز الدوائر.
+"candidates": حتى 25 كلمة عربية حقيقية من 4 أو 5 حروف قابلة للتوصيل من خانات متجاورة (أفقي/رأسي/قطري)، دون إعادة استخدام الخانة.
+لا تخمن حرفا غير واضح، واكتب ? مكانه. لا تكتب أي شرح.`;
 
     const response = await fetch(
       'https://api.openai.com/v1/chat/completions',
@@ -188,18 +165,19 @@ exports.handler = async event => {
         method: 'POST',
         signal: controller.signal,
         headers: {
-          Authorization: 'Bearer ' + process.env.OPENAI_API_KEY,
+          Authorization:
+            'Bearer ' + process.env.OPENAI_API_KEY,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           model: 'gpt-4.1-mini',
           temperature: 0,
-          max_tokens: 2000,
-          response_format: { type: 'json_object' },
+          max_tokens: 1000,
+          response_format: {type: 'json_object'},
           messages: [{
             role: 'user',
             content: [
-              { type: 'text', text: prompt },
+              {type: 'text', text: prompt},
               {
                 type: 'image_url',
                 image_url: {
@@ -215,74 +193,73 @@ exports.handler = async event => {
 
     const raw = await response.json();
 
-    if (!response.ok) {
+    if (!response.ok)
       throw new Error(raw.error?.message || 'فشل التحليل');
-    }
 
     const parsed = JSON.parse(
       raw.choices?.[0]?.message?.content || '{}'
     );
 
-    if (!Array.isArray(parsed.grid) || parsed.grid.length !== 16) {
-      throw new Error('لم أتمكن من قراءة شبكة 4×4');
+    if (!Array.isArray(parsed.grid) ||
+        parsed.grid.length !== 16) {
+      throw new Error('لم أستطع قراءة شبكة 4×4');
     }
 
     const grid = parsed.grid.map(
-      cell => [...String(cell || '?').trim()][0] || '?'
+      value => [...String(value || '?').trim()][0] || '?'
     );
 
-    if (grid.some(cell => !/^[\u0621-\u064A]$/u.test(cell))) {
-      throw new Error('بعض الحروف غير واضحة، ارفع صورة أوضح');
+    if (grid.some(
+      letter => !/^[\u0621-\u064A]$/u.test(letter)
+    )) {
+      throw new Error(
+        'بعض الحروف غير واضحة؛ ارفع صورة أوضح للشبكة كاملة'
+      );
     }
 
-    const b = parsed.bounds;
-
-    const bounds = b ? {
+    const b = parsed.bounds || {};
+    const bounds = {
       left: Number(b.left),
       right: Number(b.right),
       top: Number(b.top),
       bottom: Number(b.bottom)
-    } : null;
+    };
 
     if (
-      !bounds ||
       !Object.values(bounds).every(
         n => Number.isFinite(n) && n >= 0 && n <= 1
       ) ||
-      bounds.right <= bounds.left ||
-      bounds.bottom <= bounds.top
+      bounds.left >= bounds.right ||
+      bounds.top >= bounds.bottom
     ) {
       throw new Error(
-        'تعذر تحديد مواقع الحروف، ارفع صورة كاملة'
+        'لم أستطع تحديد مواقع الحروف بدقة؛ ارفع صورة كاملة'
       );
     }
 
-    const candidates = [
-      ...(Array.isArray(parsed.candidates)
-        ? parsed.candidates
-        : []),
-      ...DICTIONARY
-    ];
-
     const words = [];
     const seen = new Set();
+    const candidates = [
+      ...(Array.isArray(parsed.candidates)
+        ? parsed.candidates : []),
+      ...WORDS
+    ];
 
-    for (const candidate of candidates) {
-      const word = String(candidate).trim()
+    for (const value of candidates) {
+      const word = String(value).trim()
         .replace(/[\u064B-\u065F\u0670\u0640]/g, '');
 
-      const key = norm(word);
+      const key = normalize(word);
 
-      if (seen.has(key)) continue;
-      if (!/^[\u0621-\u064A]{4,5}$/u.test(word)) continue;
+      if (
+        seen.has(key) ||
+        !/^[\u0621-\u064A]{4,5}$/u.test(word)
+      ) continue;
 
       seen.add(key);
+      const path = findPath(word, grid);
 
-      const path = trace(word, grid);
-
-      if (path) {
-        words.push({ word, path });
-      }
+      if (path) words.push({word, path});
     }
 
     words.sort(
@@ -291,23 +268,18 @@ exports.handler = async event => {
         a.word.localeCompare(b.word, 'ar')
     );
 
-    return send(200, {
-      grid,
-      bounds,
-      words,
-      note: 'المسارات متحققة على الحروف المقروءة، لكن قراءة الصورة وقبول اللعبة غير مضمونين.'
-    });
+    return respond(200, {grid, bounds, words});
 
   } catch (error) {
-    return send(
+    return respond(
       error.name === 'AbortError' ? 504 : 422,
       {
         error: error.name === 'AbortError'
-          ? 'انتهت مهلة التحليل، حاول مجددًا'
+          ? 'انتهت مهلة 9 ثوانٍ؛ جرّب صورة أصغر أو أعد المحاولة'
           : error.message
       }
     );
   } finally {
-    clearTimeout(timeout);
+    clearTimeout(timer);
   }
 };
