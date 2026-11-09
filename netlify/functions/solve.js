@@ -8,13 +8,11 @@ const HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type'
 };
 
-function reply(statusCode, data) {
-  return {
-    statusCode,
-    headers: HEADERS,
-    body: JSON.stringify(data)
-  };
-}
+const send = (statusCode, data) => ({
+  statusCode,
+  headers: HEADERS,
+  body: JSON.stringify(data)
+});
 
 function normalize(value) {
   return String(value || '')
@@ -24,86 +22,126 @@ function normalize(value) {
     .replace(/ى/g, 'ي');
 }
 
-// فحص مسار الكلمة داخل شبكة 4×4
-function findPath(word, grid) {
-  const letters = [...normalize(word)];
+// فحص اتصال الحروف دون عرض المسارات
+function isConnectedWord(word, grid) {
+  const chars = [...normalize(word)];
 
-  if (letters.length < 4 || letters.length > 5) {
-    return null;
+  if (chars.length < 3 || chars.length > 16) {
+    return false;
   }
 
   const cells = grid.map(normalize);
+  const failed = new Set();
 
-  function walk(position, used, path) {
-    if (path.length === letters.length) {
-      return path;
-    }
+  function search(index, at, used) {
+    if (at === chars.length) return true;
 
-    for (let i = 0; i < 16; i++) {
+    const state = `${index},${at},${used}`;
+    if (failed.has(state)) return false;
+
+    for (let next = 0; next < 16; next++) {
+      if (used & (1 << next)) continue;
+      if (cells[next] !== chars[at]) continue;
+
+      if (index !== -1) {
+        const dr = Math.abs(
+          Math.floor(next / 4) -
+          Math.floor(index / 4)
+        );
+
+        const dc = Math.abs(
+          (next % 4) - (index % 4)
+        );
+
+        if (dr > 1 || dc > 1) continue;
+      }
+
       if (
-        (used & (1 << i)) ||
-        cells[i] !== letters[path.length]
+        search(
+          next,
+          at + 1,
+          used | (1 << next)
+        )
       ) {
-        continue;
+        return true;
       }
-
-      if (position !== -1) {
-        const rowGap = Math.abs(
-          Math.floor(i / 4) -
-          Math.floor(position / 4)
-        );
-
-        const colGap = Math.abs(
-          (i % 4) - (position % 4)
-        );
-
-        if (rowGap > 1 || colGap > 1) {
-          continue;
-        }
-      }
-
-      const result = walk(
-        i,
-        used | (1 << i),
-        [...path, i]
-      );
-
-      if (result) return result;
     }
 
-    return null;
+    failed.add(state);
+    return false;
   }
 
-  return walk(-1, 0, []);
+  return search(-1, 0, 0);
 }
 
-exports.handler = async (event) => {
+// التعامل مع رد الذكاء الاصطناعي
+function parseModelOutput(content) {
+  try {
+    return JSON.parse(content);
+  } catch (_) {
+    const gridMatch = content.match(
+      /"grid"\s*:\s*(\[[^\]]*\])/
+    );
+
+    if (!gridMatch) {
+      throw new Error(
+        'قراءة الحروف لم تكتمل. جرّب صورة أصغر.'
+      );
+    }
+
+    let grid;
+
+    try {
+      grid = JSON.parse(gridMatch[1]);
+    } catch (_) {
+      throw new Error(
+        'قراءة الحروف لم تكتمل. أعد المحاولة.'
+      );
+    }
+
+    const wordsSection = content.match(
+      /"words"\s*:\s*\[([\s\S]*)/
+    );
+
+    const words = wordsSection
+      ? [
+          ...wordsSection[1].matchAll(
+            /"([\u0621-\u064A]{3,16})"/gu
+          )
+        ].map(x => x[1])
+      : [];
+
+    return {grid, words};
+  }
+}
+
+exports.handler = async event => {
   if (event.httpMethod === 'OPTIONS') {
-    return reply(200, {});
+    return send(200, {});
   }
 
   if (event.httpMethod !== 'POST') {
-    return reply(405, {
+    return send(405, {
       error: 'POST only'
     });
   }
 
   if (!process.env.OPENAI_API_KEY) {
-    return reply(503, {
-      error: 'OPENAI_API_KEY غير موجود في Netlify'
+    return send(503, {
+      error: 'مفتاح OPENAI_API_KEY غير موجود'
     });
   }
 
-  let timeout;
+  let timer;
 
   try {
     let body;
 
     try {
       body = JSON.parse(event.body || '{}');
-    } catch {
-      return reply(400, {
-        error: 'طلب الصورة غير صالح'
+    } catch (_) {
+      return send(400, {
+        error: 'بيانات الصورة غير صحيحة'
       });
     }
 
@@ -114,73 +152,55 @@ exports.handler = async (event) => {
       !/^data:image\/(png|jpeg|webp);base64,/i.test(image) ||
       image.length > 7500000
     ) {
-      return reply(400, {
-        error: 'ارفع صورة واضحة وحجمها أصغر'
+      return send(400, {
+        error: 'ارفع صورة واضحة وأصغر حجمًا'
       });
     }
 
     const controller = new AbortController();
 
-    // مهلة 10 ثوانٍ
-    timeout = setTimeout(
+    // مهلة التحليل 10 ثوانٍ
+    timer = setTimeout(
       () => controller.abort(),
       10000
     );
 
-    // الذكاء الاصطناعي يحلل الصورة بنفسه
-    // بدون قاموس أو كلمات محددة مسبقًا
+    // تحليل الصورة والكلمات دون قاموس ثابت
     const prompt = `
-أنت تحل لعبة Wordbox العربية من صورة.
+أنت خبير بحل لعبة Wordbox العربية.
 
-انظر إلى شبكة الدوائر 4×4 بنفسك.
+انظر للصورة واقرأ شبكة الحروف 4×4 فقط.
 
-أولًا:
-اقرأ الحروف الـ16 الموجودة داخل الدوائر
-بدقة، صفًا صفًا من يسار الصورة إلى
-يمينها، ومن الأعلى إلى الأسفل.
+لا تقرأ كلمة الجولة أو أسماء اللاعبين
+أو النصوص خارج الدوائر.
 
-تجاهل أسماء اللاعبين والنصوص
-الموجودة خارج شبكة الحروف.
+أرجع JSON فقط بمفتاحين بالترتيب:
 
-ثانيًا:
-انطلاقًا من الحروف التي قرأتها فقط،
-فكّر بنفسك في 15 إلى 22 كلمة عربية
-حقيقية مختلفة من 4 أو 5 حروف.
+"grid":
+مصفوفة 16 حرفًا، صفوفًا من الأعلى
+للأسفل، وكل صف من يسار الصورة
+إلى يمينها.
 
-لا تستخدم أي قائمة كلمات مقدمة مسبقًا.
+"words":
+مصفوفة من 30 إلى 35 كلمة عربية
+حقيقية محتملة من حروف الشبكة نفسها.
 
-افحص اتصال الحروف:
-أفقي أو رأسي أو قطري.
+فكّر في كلمات قصيرة وطويلة:
+3 و4 و5 و6 و7 أحرف،
+وأطول إن وجدت.
 
-لا تستخدم الخانة نفسها مرتين
-داخل الكلمة الواحدة.
+الحروف متجاورة أفقيًا أو عموديًا
+أو قطريًا، ولا تستخدم الخانة نفسها
+مرتين في الكلمة.
 
-حاول إيجاد الكلمات الصعبة أيضًا،
-ولا تخترع حروفًا غير موجودة.
+نوّع بين الأسماء والأفعال والصفات،
+ولا تكرر الكلمات.
 
-ثالثًا:
-حدد مراكز دوائر أقصى اليسار واليمين
-والأعلى والأسفل كنسب من 0 إلى 1
-من أبعاد الصورة الكاملة.
+أعطِ الأولوية للكلمات الشائعة،
+ولا تضف أي حروف من خارج الشبكة.
 
-أرجع JSON فقط، دون شرح،
-بالمفاتيح التالية:
-
-grid:
-مصفوفة 16 حرفًا منفصلًا.
-
-bounds:
-كائن يحتوي على
-left وright وtop وbottom.
-
-candidates:
-مصفوفة الكلمات التي وجدتها.
-
-استخرج جميع القيم من الصورة نفسها.
-لا تستخدم أمثلة ثابتة.
-
-إذا لم تتمكن من قراءة الشبكة بدقة،
-أرجع grid فارغة.
+لا تكتب مسارات ولا إحداثيات
+ولا شرحًا، فقط JSON.
 `;
 
     const response = await fetch(
@@ -190,13 +210,13 @@ candidates:
         signal: controller.signal,
         headers: {
           Authorization:
-            'Bearer ' + process.env.OPENAI_API_KEY,
+            `Bearer ${process.env.OPENAI_API_KEY}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           model: 'gpt-4.1-mini',
           temperature: 0,
-          max_tokens: 950,
+          max_tokens: 1050,
           response_format: {
             type: 'json_object'
           },
@@ -220,71 +240,70 @@ candidates:
       }
     );
 
-    const text = await response.text();
+    const apiText = await response.text();
 
     let api;
 
     try {
-      api = JSON.parse(text);
-    } catch {
+      api = JSON.parse(apiText);
+    } catch (_) {
       throw new Error(
-        'خدمة قراءة الصورة أرجعت ردًا ناقصًا'
+        'خدمة التحليل أرجعت ردًا غير مكتمل'
       );
     }
 
     if (!response.ok) {
       throw new Error(
         api.error?.message ||
-        'تعذّر تحليل الصورة'
+        'فشل تحليل الصورة'
       );
     }
 
     const content =
       api.choices?.[0]?.message?.content;
 
-    let parsed;
-
-    try {
-      parsed = JSON.parse(content || '');
-    } catch {
+    if (
+      typeof content !== 'string' ||
+      !content.trim()
+    ) {
       throw new Error(
-        'التحليل لم يكتمل؛ جرّب لقطة شاشة أصغر'
+        'لم تصل نتيجة تحليل الصورة'
       );
     }
+
+    const parsed = parseModelOutput(content);
 
     if (
       !Array.isArray(parsed.grid) ||
       parsed.grid.length !== 16
     ) {
       throw new Error(
-        'تعذّرت قراءة حروف الشبكة الـ16'
+        'لم أتمكن من قراءة الحروف الـ16'
       );
     }
 
     const grid = parsed.grid.map(
-      x => String(x || '').trim()
+      value => String(value || '').trim()
     );
 
     if (
       grid.some(
-        x =>
-          [...x].length !== 1 ||
-          !/^[\u0621-\u064A]$/u.test(x)
+        value =>
+          [...value].length !== 1 ||
+          !/^[\u0621-\u064A]$/u.test(value)
       )
     ) {
       throw new Error(
-        'بعض الحروف غير واضحة؛ ارفع لقطة شاشة مباشرة'
+        'بعض الحروف غير واضحة. جرّب لقطة شاشة مباشرة.'
       );
     }
 
-    // فحص كلمات الذكاء الاصطناعي
-    const words = [];
     const seen = new Set();
+    const words = [];
 
-    const candidates =
-      Array.isArray(parsed.candidates)
-        ? parsed.candidates
-        : [];
+    const candidates = Array.isArray(parsed.words)
+      ? parsed.words
+      : [];
 
     for (const item of candidates) {
       const word = String(item || '')
@@ -297,76 +316,40 @@ candidates:
       const key = normalize(word);
 
       if (
-        seen.has(key) ||
-        !/^[\u0621-\u064A]{4,5}$/u.test(word)
+        !/^[\u0621-\u064A]{3,16}$/u.test(word) ||
+        seen.has(key)
       ) {
         continue;
       }
 
       seen.add(key);
 
-      const path = findPath(word, grid);
-
-      if (path) {
-        words.push({
-          word,
-          path
-        });
+      if (isConnectedWord(word, grid)) {
+        words.push({word});
       }
+
+      // عرض 15 كلمة فقط
+      if (words.length === 15) break;
     }
 
-    // تحديد مواقع الدوائر على الصورة
-    const b = parsed.bounds || {};
-
-    const bounds = {
-      left: Number(b.left),
-      right: Number(b.right),
-      top: Number(b.top),
-      bottom: Number(b.bottom)
-    };
-
-    const validBounds =
-      ['left', 'right', 'top', 'bottom'].every(
-        k =>
-          b[k] !== undefined &&
-          b[k] !== null &&
-          Number.isFinite(bounds[k]) &&
-          bounds[k] >= 0 &&
-          bounds[k] <= 1
-      ) &&
-      bounds.left < bounds.right &&
-      bounds.top < bounds.bottom;
-
-    words.sort(
-      (a, b) =>
-        b.word.length - a.word.length ||
-        a.word.localeCompare(b.word, 'ar')
-    );
-
-    return reply(200, {
+    return send(200, {
       grid,
-      bounds: validBounds ? bounds : null,
-
-      // عرض 15 كلمة كحد أقصى
-      words: words.slice(0, 15),
-
-      note:
-        'الكلمات من تحليل الصورة مباشرة، ' +
-        'وتم فحص اتصال الحروف. ' +
-        'قبولها داخل اللعبة غير مضمون.'
+      words,
+      note: words.length < 15
+        ? 'عُرضت الكلمات التي أمكن التحقق من اتصال حروفها فقط.'
+        : 'تم العثور على 15 كلمة متصلة الحروف.'
     });
 
   } catch (error) {
-    return reply(
+    return send(
       error.name === 'AbortError' ? 504 : 422,
       {
-        error:
-          error.name === 'AbortError'
-            ? 'انتهت مهلة تحليل الصورة (10 ثوانٍ). جرّب صورة أصغر.'
-            : error.message
+        error: error.name === 'AbortError'
+          ? 'انتهت مهلة قراءة الصورة (10 ثوانٍ). جرّب صورة أصغر.'
+          : error.message
       }
     );
   } finally {
-    clearTimeout(timeout);
+    clearTimeout(timer);
   }
 };
