@@ -1,3 +1,4 @@
+
 'use strict';
 
 const HEADERS = {
@@ -16,12 +17,12 @@ const reply = (statusCode, data) => ({
 function normalize(value) {
   return String(value || '')
     .normalize('NFC')
-    .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
+    .replace(/[\u064B-\u065F\u0670\u0640\u0640]/g, '')
     .replace(/[أإآٱ]/g, 'ا')
     .replace(/ى/g, 'ي');
 }
 
-const COMMON_WORDS = `
+const DICTIONARY_TEXT = `
 سلام كلام كتاب كاتب مكتب مكتبة كلمة كلمات
 ملك ملكة ملكي ملوك مالك ملكات
 بلاد بلدي بلاط طالب طلبت طلاب
@@ -99,49 +100,72 @@ const COMMON_WORDS = `
 قلمك قلمنا مرقم مرقمة
 نملة ارقام رقمية ملامح
 عامل عمال عمالة عملت عملنا
-رمال رمان مران مرام
 عمران عنوان عناوين
 منار منارة منير منيرة
 نوران نوراني نورنا
-تنور تنورت تنوير
-نورت نيران ناري
-توتة توتيا
+تنور تنورت تنوير نورت نيران
 ترانيم ترنيم ترنم
 رتبت ترتيب رتبنا
-مررت مرور مرارة
+مررت مرور
 امور امارة امارات
-تمرين تمرينك
-تمرنا تمرين
-رنتي رنات
-مروان مريم
-لامع لامعة
-لماع لمعت
-عالم عالمية
-اعلام اعلامي
-معلوم معلومة
-نعمة نعيم
+تمرين تمرنا
+مروان لامع لامعة لمعت
+عالم عالمية اعلام اعلامي
+معلوم معلومة نعمة نعيم
 مناعة مانع
+لعبة لعبنا لعبوا
+قمر قمار قمرية
+رمان رمانة
+رمال رملية
+قليل قليلة
+نور نوران نوري
+عمر عمري عمرنا
+تمر تمرة تمور
+ثمن ثمنه ثمرة ثمار
+ثمار ثمارها
+تاجر تجارة تجار
+تنمر تنمرت
+توبة تائب تابت
+تونا نونة
+ولدت ولادة
+اولاد والد والدة
+رجل رجال رجولة
+امرأة امراة
+انسان انسانة
+نائم نائمة نومي
+نملة نملة
+عاقل عاقلة
+عالم علامة
+الوان لوان
 `.trim().split(/\s+/u);
 
-const COMMON = new Map();
+const DICTIONARY = new Map();
 
-for (const word of COMMON_WORDS) {
+for (const word of DICTIONARY_TEXT) {
   const key = normalize(word);
 
   if (key.length >= 4 && key.length <= 6) {
-    if (!COMMON.has(key)) {
-      COMMON.set(key, word);
+    if (!DICTIONARY.has(key)) {
+      DICTIONARY.set(key, word);
     }
   }
 }
 
-function prepareGrid(parsed) {
-  let grid = parsed.grid;
-  let rows = Number(parsed.rows);
-  let cols = Number(parsed.cols);
+const PREFIXES = new Set();
+
+for (const word of DICTIONARY.keys()) {
+  for (let i = 1; i <= word.length; i++) {
+    PREFIXES.add(word.slice(0, i));
+  }
+}
+
+function prepareGrid(input) {
+  let grid = input.grid;
+  let rows = Number(input.rows);
+  let cols = Number(input.cols);
 
   if (!Array.isArray(grid) || !grid.length) {
-    throw new Error('لم يتم التعرف على الشبكة');
+    throw new Error('لم يتم التعرف على الحروف');
   }
 
   if (Array.isArray(grid[0])) {
@@ -149,9 +173,10 @@ function prepareGrid(parsed) {
     cols = grid[0].length;
 
     if (
-      grid.some(row =>
-        !Array.isArray(row) ||
-        row.length !== cols
+      grid.some(
+        row =>
+          !Array.isArray(row) ||
+          row.length !== cols
       )
     ) {
       throw new Error('صفوف الشبكة غير متساوية');
@@ -178,58 +203,56 @@ function prepareGrid(parsed) {
     cols > 7 ||
     rows * cols !== grid.length
   ) {
-    throw new Error('تعذر تحديد حجم الشبكة');
+    throw new Error('حجم الشبكة غير صحيح');
   }
 
-  grid = grid.map(value =>
-    String(value || '').trim()
+  grid = grid.map(
+    value => String(value || '').trim()
   );
 
   if (
-    grid.some(cell =>
-      [...cell].length < 1 ||
-      [...cell].length > 2 ||
-      !/^[\u0621-\u064A]{1,2}$/u.test(cell)
+    grid.some(
+      cell =>
+        [...cell].length < 1 ||
+        [...cell].length > 2 ||
+        !/^[\u0621-\u064A]{1,2}$/u.test(cell)
     )
   ) {
     throw new Error(
-      'بعض الحروف غير واضحة. حاول رفع صورة أوضح.'
+      'بعض الحروف غير واضحة. جرّب صورة أقرب.'
     );
   }
 
-  return { grid, rows, cols };
+  return {grid, rows, cols};
 }
 
 function buildNeighbors(rows, cols) {
-  const neighbors = [];
+  return Array.from(
+    {length: rows * cols},
+    (_, index) => {
+      const r = Math.floor(index / cols);
+      const c = index % cols;
+      const list = [];
 
-  for (let i = 0; i < rows * cols; i++) {
-    const row = Math.floor(i / cols);
-    const col = i % cols;
-    const list = [];
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (!dr && !dc) continue;
 
-    for (let dr = -1; dr <= 1; dr++) {
-      for (let dc = -1; dc <= 1; dc++) {
-        if (!dr && !dc) continue;
+          const nr = r + dr;
+          const nc = c + dc;
 
-        const nr = row + dr;
-        const nc = col + dc;
-
-        if (
-          nr >= 0 &&
-          nr < rows &&
-          nc >= 0 &&
-          nc < cols
-        ) {
-          list.push(nr * cols + nc);
+          if (
+            nr >= 0 && nr < rows &&
+            nc >= 0 && nc < cols
+          ) {
+            list.push(nr * cols + nc);
+          }
         }
       }
+
+      return list;
     }
-
-    neighbors.push(list);
-  }
-
-  return neighbors;
+  );
 }
 
 function findPath(word, cells, neighbors) {
@@ -239,82 +262,98 @@ function findPath(word, cells, neighbors) {
     return null;
   }
 
-  function walk(index, offset, used, path) {
+  const path = [];
+  const used = new Set();
+
+  function walk(index, offset) {
     const cell = cells[index];
 
     if (!target.startsWith(cell, offset)) {
-      return null;
+      return false;
     }
 
+    used.add(index);
+    path.push(index);
+
     const nextOffset = offset + cell.length;
-    const nextPath = [...path, index];
 
     if (nextOffset === target.length) {
-      return nextPath;
+      return true;
     }
 
     for (const next of neighbors[index]) {
-      const bit = 1n << BigInt(next);
+      if (used.has(next)) continue;
 
-      if ((used & bit) !== 0n) {
-        continue;
+      if (walk(next, nextOffset)) {
+        return true;
       }
-
-      const result = walk(
-        next,
-        nextOffset,
-        used | bit,
-        nextPath
-      );
-
-      if (result) return result;
     }
 
-    return null;
+    used.delete(index);
+    path.pop();
+    return false;
   }
 
   for (let i = 0; i < cells.length; i++) {
-    const result = walk(
-      i,
-      0,
-      1n << BigInt(i),
-      []
-    );
+    used.clear();
+    path.length = 0;
 
-    if (result) return result;
+    if (walk(i, 0)) {
+      return [...path];
+    }
   }
 
   return null;
 }
 
-function getCommonCandidates(grid, rows, cols) {
+function getDictionaryWords(grid, rows, cols) {
   const cells = grid.map(normalize);
   const neighbors = buildNeighbors(rows, cols);
-  const found = [];
+  const found = new Map();
 
-  for (const word of COMMON.values()) {
-    const path = findPath(word, cells, neighbors);
+  function walk(index, text, used, path) {
+    const current = text + cells[index];
 
-    if (path) {
-      found.push({ word, path, source: 'common' });
+    if (current.length > 6) return;
+    if (!PREFIXES.has(current)) return;
+
+    const word = DICTIONARY.get(current);
+
+    if (word && !found.has(current)) {
+      found.set(current, {
+        word,
+        path: [...path, index],
+        source: 'dictionary'
+      });
+    }
+
+    for (const next of neighbors[index]) {
+      if (used.has(next)) continue;
+
+      used.add(next);
+      walk(
+        next,
+        current,
+        used,
+        [...path, index]
+      );
+      used.delete(next);
     }
   }
 
-  return found;
+  for (let i = 0; i < cells.length; i++) {
+    walk(i, '', new Set([i]), []);
+  }
+
+  return [...found.values()];
 }
 
-function validateCandidates(
-  candidates,
-  grid,
-  rows,
-  cols
-) {
+function validateAIWords(words, grid, rows, cols) {
   const cells = grid.map(normalize);
   const neighbors = buildNeighbors(rows, cols);
-  const seen = new Set();
-  const valid = [];
+  const found = new Map();
 
-  for (const item of candidates) {
+  for (const item of words) {
     const word = String(
       typeof item === 'string'
         ? item
@@ -323,14 +362,11 @@ function validateCandidates(
 
     const key = normalize(word);
 
-    if (
-      !/^[\u0621-\u064A]{4,6}$/u.test(word) ||
-      seen.has(key)
-    ) {
+    if (!/^[\u0621-\u064A]{4,6}$/u.test(word)) {
       continue;
     }
 
-    seen.add(key);
+    if (found.has(key)) continue;
 
     const path = findPath(
       word,
@@ -340,19 +376,17 @@ function validateCandidates(
 
     if (!path) continue;
 
-    valid.push({
+    found.set(key, {
       word,
       path,
-      source: COMMON.has(key)
-        ? 'common'
-        : 'ai'
+      source: 'ai'
     });
   }
 
-  return valid;
+  return [...found.values()];
 }
 
-async function askOpenAI(messages, signal, maxTokens) {
+async function askAI(messages, signal, maxTokens) {
   const response = await fetch(
     'https://api.openai.com/v1/chat/completions',
     {
@@ -382,13 +416,13 @@ async function askOpenAI(messages, signal, maxTokens) {
   try {
     api = JSON.parse(raw);
   } catch (_) {
-    throw new Error('رد خدمة الذكاء الاصطناعي غير مكتمل');
+    throw new Error('رد خدمة التحليل غير مكتمل');
   }
 
   if (!response.ok) {
     throw new Error(
       api.error?.message ||
-      'تعذر الاتصال بخدمة التحليل'
+      'فشل الاتصال بخدمة التحليل'
     );
   }
 
@@ -396,7 +430,7 @@ async function askOpenAI(messages, signal, maxTokens) {
 
   if (choice?.finish_reason === 'length') {
     throw new Error(
-      'نتيجة التحليل طويلة ولم تكتمل. حاول مرة أخرى.'
+      'نتيجة التحليل لم تكتمل. جرّب مرة أخرى.'
     );
   }
 
@@ -434,16 +468,20 @@ exports.handler = async event => {
 
   try {
     const body = JSON.parse(event.body || '{}');
-    const image = body.image;
 
-    if (
-      typeof image !== 'string' ||
-      !/^data:image\/(png|jpeg|webp);base64,/i.test(image) ||
-      image.length > 7500000
-    ) {
-      return reply(400, {
-        error: 'الصورة غير صالحة أو كبيرة'
-      });
+    const image = body.image;
+    const hasGrid = Array.isArray(body.grid);
+
+    if (!hasGrid) {
+      if (
+        typeof image !== 'string' ||
+        !/^data:image\/(png|jpeg|webp);base64,/i.test(image) ||
+        image.length > 7500000
+      ) {
+        return reply(400, {
+          error: 'ارفع صورة صالحة أولًا'
+        });
+      }
     }
 
     const controller = new AbortController();
@@ -453,44 +491,38 @@ exports.handler = async event => {
       25000
     );
 
-    const visionPrompt = `
-أنت متخصص في قراءة لعبة Wordbox العربية.
+    let parsed;
 
-اقرأ شبكة الحروف من الصورة بدقة شديدة.
+    if (hasGrid) {
+      // زر كلمات جديدة لا يحتاج إعادة قراءة الصورة
+      parsed = body;
+    } else {
+      const visionPrompt = `
+اقرأ شبكة لعبة Wordbox العربية من الصورة.
 
-الشبكة قد تكون:
-4×4
-5×5
-4×6
-6×4
-أو أي شبكة مستطيلة أخرى.
+حدد عدد الصفوف والأعمدة الحقيقي.
 
-لا تفترض حجم الشبكة مسبقًا.
-
-عد الصفوف والأعمدة من الصورة.
-
-اقرأ كل صف من يسار الصورة إلى يمينها،
-ثم انتقل للصف التالي من الأعلى للأسفل.
+قد تكون الشبكة:
+4×4 أو 5×5 أو 4×6 أو 6×4
+أو أي شبكة مستطيلة واضحة.
 
 كل دائرة تمثل خانة واحدة.
 
 بعض الخانات تحتوي حرفين مثل:
 "نم" أو "لا".
 
-احفظ الحرفين معًا وبترتيبهما الصحيح.
+احتفظ بمحتوى الخانة كاملًا
+وبالترتيب الصحيح.
 
-تجاهل:
-أسماء اللاعبين،
-الوقت،
-النتائج،
-عنوان الجولة،
-وأزرار اللعبة.
+تجاهل أسماء اللاعبين والنتائج
+والوقت والنصوص خارج الشبكة.
 
-لا تخترع أي حرف.
+اقرأ كل صف من يسار الصورة
+إلى يمينها، ثم من أعلى إلى أسفل.
 
-إذا كان حرف غير واضح، استخدم "?".
+لا تخمن الحروف غير الواضحة.
 
-أرجع JSON فقط بالشكل التالي:
+أرجع JSON فقط بهذه البنية:
 
 {
   "grid": [
@@ -502,191 +534,189 @@ exports.handler = async event => {
   ]
 }
 
-هذا مثال لشكل البيانات فقط.
-لا تنسخ حروفه إلا إذا طابقت الصورة.
-
-لا تقترح كلمات الآن.
+هذا مثال لشكل البيانات وليس إجابة.
+استخدم الحروف الموجودة في الصورة فقط.
 `;
 
-    const parsed = await askOpenAI(
-      [{
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: visionPrompt
-          },
-          {
-            type: 'image_url',
-            image_url: {
-              url: image,
-              detail: 'high'
+      parsed = await askAI(
+        [{
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: visionPrompt
+            },
+            {
+              type: 'image_url',
+              image_url: {
+                url: image,
+                detail: 'high'
+              }
             }
-          }
-        ]
-      }],
-      controller.signal,
-      850
+          ]
+        }],
+        controller.signal,
+        900
+      );
+    }
+
+    const {grid, rows, cols} = prepareGrid(parsed);
+
+    // الكلمات التي ظهرت سابقًا
+    const excluded = new Set(
+      (Array.isArray(body.exclude)
+        ? body.exclude.slice(0, 500)
+        : []
+      ).map(normalize)
     );
 
-    const { grid, rows, cols } = prepareGrid(parsed);
-
-    const commonCandidates = getCommonCandidates(
+    // البحث المحلي عن الكلمات ذات المسار الصحيح
+    const dictionaryWords = getDictionaryWords(
       grid,
       rows,
       cols
     );
 
-    const discoveryPrompt = `
-أنت خبير في الكلمات العربية ولعبة Wordbox.
+    const availableDictionary = dictionaryWords
+      .filter(
+        item => !excluded.has(normalize(item.word))
+      );
 
-هذه شبكة الحروف الفعلية:
+    let aiWords = [];
+
+    // إذا القاموس ما يكفي، نطلب كلمات إضافية
+    if (availableDictionary.length < 10) {
+      const discoveryPrompt = `
+أنت متخصص في المفردات العربية.
+
+هذه شبكة لعبة Wordbox:
 
 ${JSON.stringify(grid)}
 
-عدد الصفوف: ${rows}
-عدد الأعمدة: ${cols}
+الصفوف: ${rows}
+الأعمدة: ${cols}
 
-مهم:
-الصفوف مرتبة من أعلى إلى أسفل.
-والأعمدة مرتبة من يسار الصورة إلى يمينها.
+الصفوف مرتبة من أعلى إلى أسفل،
+والأعمدة من يسار الصورة إلى يمينها.
 
-كل خانة يمكن استخدامها مرة واحدة فقط
-في الكلمة الواحدة.
+ابحث عن كلمات عربية حقيقية
+من 4 أو 5 أو 6 حروف فقط.
 
-يسمح بالانتقال بين الخانات المتجاورة:
-أفقيًا أو عموديًا أو قطريًا.
+يمكن الانتقال إلى الخانة المجاورة
+أفقيًا أو رأسيًا أو قطريًا.
 
-إذا احتوت الخانة حرفين مثل "نم"،
-يجب استخدامهما معًا وبنفس الترتيب.
+لا يمكن استعمال الخانة مرتين.
 
-ابحث عن أكبر عدد ممكن من الكلمات
-العربية الحقيقية والمفهومة.
+الخانة التي تحتوي حرفين
+يجب استخدامهما معًا وبترتيبهما.
 
-الأطوال المسموحة:
-4 أو 5 أو 6 حروف فقط.
+هذه كلمات سبق عرضها:
+${JSON.stringify([...excluded])}
 
-ابحث عن:
-الأسماء الشائعة،
-الأفعال الصحيحة،
-الصفات،
-جموع الكلمات،
-والكلمات المستخدمة في العربية.
+وهذه كلمات معروفة وجدناها بالفعل:
+${JSON.stringify(
+  dictionaryWords.map(x => x.word)
+)}
 
-لا تستخدم أسماء أشخاص نادرة.
-لا تخترع كلمات.
-لا تستخدم حروفًا غير موجودة.
+لا تكرر الكلمات السابقة.
 
-اقترح حتى 60 كلمة محتملة.
+اقترح كلمات إضافية مختلفة
+من الأسماء والأفعال والصفات
+والجمع والتصريفات الشائعة.
 
-لا تقلق بشأن التحقق النهائي من المسار،
-لأن البرنامج سيفحص كل كلمة بنفسه.
+ارفض الكلمات المخترعة
+والأسماء النادرة والمشكوك فيها.
+
+لا تضع كلمة إلا إذا كنت واثقًا
+أنها كلمة عربية صحيحة.
+
+حاول اقتراح حتى 40 كلمة.
+
+سيتم فحص المسارات برمجيًا،
+لذلك لا تخترع حروفًا.
 
 أرجع JSON فقط:
 
 {
-  "words": ["كلمة", "كلمة"]
+  "words": ["كلمة"]
 }
 `;
 
-    let aiCandidates = [];
+      try {
+        const discovery = await askAI(
+          [{
+            role: 'user',
+            content: discoveryPrompt
+          }],
+          controller.signal,
+          1400
+        );
 
-    try {
-      const discovery = await askOpenAI(
-        [{
-          role: 'user',
-          content: discoveryPrompt
-        }],
-        controller.signal,
-        1700
-      );
-
-      if (Array.isArray(discovery.words)) {
-        aiCandidates = discovery.words;
-      }
-    } catch (error) {
-      if (error.name === 'AbortError') {
-        throw error;
+        if (Array.isArray(discovery.words)) {
+          aiWords = validateAIWords(
+            discovery.words,
+            grid,
+            rows,
+            cols
+          );
+        }
+      } catch (error) {
+        // إذا فشل اكتشاف الكلمات الإضافية
+        // نعرض الكلمات الموثوقة من القاموس
+        if (error.name === 'AbortError') {
+          throw error;
+        }
       }
     }
 
-    const allCandidates = [
-      ...commonCandidates,
-      ...aiCandidates
-    ];
-
-    const valid = validateCandidates(
-      allCandidates,
-      grid,
-      rows,
-      cols
-    );
-
-    const common = valid.filter(
-      item => item.source === 'common'
-    );
-
-    const aiOnly = valid.filter(
-      item => item.source === 'ai'
+    // مراجعة لغوية إضافية للكلمات غير الموجودة بالقاموس
+    const unverified = aiWords.filter(
+      item => !DICTIONARY.has(normalize(item.word))
     );
 
     let approvedAI = [];
 
-    if (aiOnly.length) {
+    if (unverified.length) {
       try {
-        const reviewPrompt = `
+        const review = await askAI(
+          [{
+            role: 'user',
+            content: `
 أنت مدقق لغوي عربي صارم.
 
 افحص الكلمات التالية:
 
-${JSON.stringify(aiOnly.map(x => x.word))}
+${JSON.stringify(
+  unverified.map(x => x.word)
+)}
 
-المسارات تم التحقق منها برمجيًا،
-لذلك لا تحتاج إلى فحص اتصال الحروف.
+اقبل الكلمات العربية الحقيقية
+والواضحة والمستخدمة فقط.
 
-مهمتك هي التحقق من صحة الكلمات لغويًا.
+ارفض الكلمات المختلقة
+والأخطاء الإملائية
+والأسماء الغريبة والمشكوك فيها.
 
-اقبل فقط الكلمات العربية الحقيقية
-الواضحة والمستخدمة.
-
-اقبل الأسماء والأفعال والصفات
-والجموع والتصريفات العربية الصحيحة.
-
-ارفض:
-الكلمات المخترعة،
-الحروف المركبة بلا معنى،
-الأخطاء الإملائية،
-والكلمات المشكوك فيها.
-
-إذا لم تكن متأكدًا من كلمة، ارفضها.
+إذا لم تكن متأكدًا، ارفض الكلمة.
 
 أرجع JSON فقط:
 
-{
-  "approved": ["كلمة"]
-}
-`;
-
-        const reviewed = await askOpenAI(
-          [{
-            role: 'user',
-            content: reviewPrompt
+{"approved":[]}
+`
           }],
           controller.signal,
-          1000
+          650
         );
 
-        const approvedSet = new Set(
-          (Array.isArray(reviewed.approved)
-            ? reviewed.approved
+        const approved = new Set(
+          (Array.isArray(review.approved)
+            ? review.approved
             : []
           ).map(normalize)
         );
 
-        approvedAI = aiOnly.filter(
-          item => approvedSet.has(
-            normalize(item.word)
-          )
+        approvedAI = unverified.filter(
+          item => approved.has(normalize(item.word))
         );
       } catch (error) {
         if (error.name === 'AbortError') {
@@ -696,7 +726,7 @@ ${JSON.stringify(aiOnly.map(x => x.word))}
     }
 
     const combined = [
-      ...common,
+      ...availableDictionary,
       ...approvedAI
     ];
 
@@ -705,22 +735,16 @@ ${JSON.stringify(aiOnly.map(x => x.word))}
     for (const item of combined) {
       const key = normalize(item.word);
 
-      if (!unique.has(key)) {
-        unique.set(key, item);
-      }
+      if (excluded.has(key)) continue;
+      if (unique.has(key)) continue;
+
+      unique.set(key, item);
     }
 
     const sorted = [...unique.values()].sort(
-      (a, b) => {
-        const sourceA = a.source === 'common' ? 1 : 0;
-        const sourceB = b.source === 'common' ? 1 : 0;
-
-        return (
-          sourceB - sourceA ||
-          b.word.length - a.word.length ||
-          a.word.localeCompare(b.word, 'ar')
-        );
-      }
+      (a, b) =>
+        b.word.length - a.word.length ||
+        a.word.localeCompare(b.word, 'ar')
     );
 
     const words = sorted
@@ -735,18 +759,17 @@ ${JSON.stringify(aiOnly.map(x => x.word))}
       cols,
       grid,
       words,
-      note:
-        'تم فحص مسارات الكلمات ومراجعة الكلمات الجديدة لغويًا'
+      exhausted: words.length === 0,
+      note: 'تم استبعاد الكلمات السابقة وفحص مسارات الكلمات الجديدة'
     });
 
   } catch (error) {
     return reply(
       error.name === 'AbortError' ? 504 : 422,
       {
-        error:
-          error.name === 'AbortError'
-            ? 'انتهت مهلة التحليل. جرّب صورة أوضح أو أصغر.'
-            : error.message
+        error: error.name === 'AbortError'
+          ? 'انتهت مهلة البحث. جرّب مرة ثانية.'
+          : error.message
       }
     );
   } finally {
