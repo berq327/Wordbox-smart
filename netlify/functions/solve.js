@@ -1,19 +1,19 @@
 
 'use strict';
 
-const H = {
+const HEADERS = {
   'Content-Type': 'application/json; charset=utf-8',
   'Access-Control-Allow-Origin': '*'
 };
 
-const send = (statusCode, data) => ({
+const reply = (statusCode, body) => ({
   statusCode,
-  headers: H,
-  body: JSON.stringify(data)
+  headers: HEADERS,
+  body: JSON.stringify(body)
 });
 
-// قاموس موسع للمراحل الصعبة
-const WORDS = `
+// قاموس الكلمات للمراحل الصعبة
+const DICTIONARY = `
 نبذل نبهت نبهه نبهنا تنبه تنبيه منبه منهل نهمل تمهل تهمل مهمل
 شوهت شوهه شتمه شتمهن خمنت خمنه نبتت ينبت تنبت منبت
 نبيل نبيه نبل نذل بذل بذلة بذور ذهب ذهبي هبة هبات هبط هبوط
@@ -96,7 +96,7 @@ const WORDS = `
 غزال غزالة غالي غالية غناء اغاني
 صباح صبحي صباحي مصباح مصابيح
 مبنى مباني بنية بنين ابناء ابنك ابني
-معنى معاني معنى مبين بيان بياني
+معنى معاني مبين بيان بياني
 قلبك قلبه قلبها قلبنا قلوبك
 علمك علمه علمنا تعلم تعلمت تعليم
 عملك عمله عملنا يعمل يعملون عمال
@@ -111,7 +111,7 @@ const WORDS = `
 وصف وصفت يصف وصفه اوصاف
 وعد وعدت يوعد موعد مواعيد
 وصل وصلت يوصل وصلة موصل
-وصلت توصل وصول مواصل
+توصل وصول مواصل
 نزل نزلت ينزل منزل منازل
 ذهب ذهبت يذهب مذهب مذاهب
 كتب كتبت يكتب مكتوب مكتبة
@@ -168,63 +168,69 @@ const WORDS = `
 فاز فازت يفوز فائز فوزها
 `.trim().split(/\s+/u);
 
-const norm = value => String(value)
+const normalize = value => String(value)
   .normalize('NFC')
   .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
   .replace(/[أإآٱ]/g, 'ا')
   .replace(/ى/g, 'ي');
 
 function findPath(word, grid) {
-  const letters = [...norm(word)];
-  const cells = grid.map(norm);
-
-  if (letters.length !== 4 && letters.length !== 5) {
+  const chars = [...normalize(word)];
+  if (chars.length !== 4 && chars.length !== 5) {
     return null;
   }
 
-  function walk(path, used) {
-    if (path.length === letters.length) return path;
+  const cells = grid.map(normalize);
+
+  function dfs(path, used) {
+    if (path.length === chars.length) {
+      return path;
+    }
 
     for (let i = 0; i < 16; i++) {
-      if ((used & (1 << i)) ||
-          cells[i] !== letters[path.length]) continue;
+      if (
+        (used & (1 << i)) ||
+        cells[i] !== chars[path.length]
+      ) continue;
 
       if (path.length) {
         const last = path[path.length - 1];
 
         if (
-          Math.abs(Math.floor(i / 4) -
-                   Math.floor(last / 4)) > 1 ||
+          Math.abs(
+            Math.floor(i / 4) -
+            Math.floor(last / 4)
+          ) > 1 ||
           Math.abs(i % 4 - last % 4) > 1
         ) continue;
       }
 
-      const result = walk(
+      const found = dfs(
         [...path, i],
         used | (1 << i)
       );
 
-      if (result) return result;
+      if (found) return found;
     }
 
     return null;
   }
 
-  return walk([], 0);
+  return dfs([], 0);
 }
 
 exports.handler = async event => {
   if (event.httpMethod === 'OPTIONS') {
-    return send(200, {});
+    return reply(200, {});
   }
 
   if (event.httpMethod !== 'POST') {
-    return send(405, {error: 'POST only'});
+    return reply(405, {error: 'POST only'});
   }
 
   if (!process.env.OPENAI_API_KEY) {
-    return send(503, {
-      error: 'مفتاح OpenAI غير موجود'
+    return reply(503, {
+      error: 'OPENAI_API_KEY غير موجود'
     });
   }
 
@@ -238,50 +244,48 @@ exports.handler = async event => {
       !/^data:image\/(png|jpeg|webp);base64,/.test(image) ||
       image.length > 7500000
     ) {
-      return send(400, {
-        error: 'ارفع لقطة شاشة واضحة بحجم أصغر'
+      return reply(400, {
+        error: 'ارفع صورة واضحة وحجمها أصغر'
       });
     }
 
     const controller = new AbortController();
 
+    // نفس مهلة التحليل السابقة
     timer = setTimeout(
       () => controller.abort(),
       8800
     );
 
-    // الذكاء الاصطناعي يقرأ الحروف فقط.
     const prompt = `
-اقرأ فقط 16 حرفا داخل شبكة لعبة
-Wordbox العربية 4x4.
+اقرأ شبكة Wordbox العربية 4×4 الموجودة
+في الصورة، حتى لو كانت داخل لقطة شاشة.
 
-أرجع JSON فقط بالشكل:
-{
- "grid":["س","ب","ط","ب",
-         "ا","خ","ل","ا",
-         "ل","ا","م","ي",
-         "د","ه","ص","ج"],
- "bounds":{
-   "left":0.1,
-   "right":0.9,
-   "top":0.4,
-   "bottom":0.8
- }
-}
+أرجع JSON فقط بالمفاتيح التالية:
 
-الحروف والأرقام في المثال ليست الحل.
+"grid": مصفوفة 16 حرفًا، مرتبة من يسار
+الصورة إلى يمينها في كل صف، من الأعلى
+إلى الأسفل.
 
-استخرج الحروف الحقيقية من دوائر الشبكة،
-من يسار الصورة ليمينها صفا صفا
-من الأعلى للأسفل.
+"bounds": كائن يحوي
+left,right,top,bottom.
+قيمها بين 0 و1، وتمثل مراكز دوائر
+العمود الأيسر والأيمن والصف الأعلى
+والأسفل، كنسب من أبعاد الصورة الكاملة.
 
-bounds نسب مراكز أول وآخر عمود
-وأول وآخر صف إلى عرض وارتفاع
-الصورة الكاملة.
+"candidates": حاول إيجاد 40 إلى 60
+كلمة عربية حقيقية من 4 أو 5 حروف
+من هذه الشبكة، بما فيها الأفعال
+وتصريفاتها والأسماء والصفات
+والكلمات الصعبة.
 
-تجاهل الكلام خارج الشبكة.
-لا تبحث عن كلمات ولا تشرح.
-إذا لم يتضح حرف اكتب ?.
+كل حرف يتصل بالتالي أفقيًا أو رأسيًا
+أو قطريًا، ولا يجوز استخدام نفس
+الخانة مرتين.
+
+تجاهل النصوص خارج الدوائر.
+لا تنسخ مثالًا أو تشرح.
+إذا لم تتضح خانة اكتب ? مكانها.
 `;
 
     const response = await fetch(
@@ -297,14 +301,21 @@ bounds نسب مراكز أول وآخر عمود
         body: JSON.stringify({
           model: 'gpt-4.1-mini',
           temperature: 0,
-          max_tokens: 260,
+
+          // زيادة مساحة الكلمات في الرد
+          max_tokens: 1300,
+
           response_format: {
             type: 'json_object'
           },
+
           messages: [{
             role: 'user',
             content: [
-              {type: 'text', text: prompt},
+              {
+                type: 'text',
+                text: prompt
+              },
               {
                 type: 'image_url',
                 image_url: {
@@ -318,16 +329,17 @@ bounds نسب مراكز أول وآخر عمود
       }
     );
 
-    const data = await response.json();
+    const raw = await response.json();
 
     if (!response.ok) {
       throw new Error(
-        data.error?.message || 'فشل قراءة الصورة'
+        raw.error?.message ||
+        'فشل قراءة الصورة'
       );
     }
 
     const parsed = JSON.parse(
-      data.choices?.[0]?.message?.content || '{}'
+      raw.choices?.[0]?.message?.content || '{}'
     );
 
     if (
@@ -335,19 +347,22 @@ bounds نسب مراكز أول وآخر عمود
       parsed.grid.length !== 16
     ) {
       throw new Error(
-        'تعذر قراءة 16 حرفا؛ ارفع لقطة أوضح'
+        'لم أتمكن من قراءة 16 حرفًا'
       );
     }
 
     const grid = parsed.grid.map(
-      v => [...String(v || '?').trim()][0] || '?'
+      value =>
+        [...String(value || '?').trim()][0] || '?'
     );
 
-    if (grid.some(
-      c => !/^[\u0621-\u064A]$/u.test(c)
-    )) {
+    if (
+      grid.some(
+        char => !/^[\u0621-\u064A]$/u.test(char)
+      )
+    ) {
       throw new Error(
-        'حرف غير واضح؛ صور الشبكة كاملة بدون إشعارات'
+        'بعض الحروف غير واضحة؛ ارفع لقطة شاشة مباشرة'
       );
     }
 
@@ -362,8 +377,10 @@ bounds نسب مراكز أول وآخر عمود
 
     const validBounds =
       Object.values(bounds).every(
-        n => Number.isFinite(n) &&
-             n >= 0 && n <= 1
+        n =>
+          Number.isFinite(n) &&
+          n >= 0 &&
+          n <= 1
       ) &&
       bounds.left < bounds.right &&
       bounds.top < bounds.bottom;
@@ -371,13 +388,32 @@ bounds نسب مراكز أول وآخر عمود
     const words = [];
     const seen = new Set();
 
-    for (const candidate of WORDS) {
-      const word = String(candidate).trim();
-      const key = norm(word);
+    // الجمع بين كلمات الذكاء الاصطناعي والقاموس
+    const candidates = [
+      ...(Array.isArray(parsed.candidates)
+        ? parsed.candidates
+        : []),
+      ...DICTIONARY
+    ];
 
-      if (seen.has(key)) continue;
+    for (const value of candidates) {
+      const word = String(value)
+        .trim()
+        .replace(
+          /[\u064B-\u065F\u0670\u0640]/g,
+          ''
+        );
+
+      const key = normalize(word);
+
+      if (
+        seen.has(key) ||
+        !/^[\u0621-\u064A]{4,5}$/u.test(word)
+      ) continue;
+
       seen.add(key);
 
+      // لا تعرض كلمة بلا مسار متصل
       const path = findPath(word, grid);
 
       if (path) {
@@ -391,21 +427,24 @@ bounds نسب مراكز أول وآخر عمود
         a.word.localeCompare(b.word, 'ar')
     );
 
-    return send(200, {
+    return reply(200, {
       grid,
       bounds: validBounds ? bounds : null,
-      words: words.slice(0, 35),
+
+      // السماح بعرض حتى 80 كلمة
+      words: words.slice(0, 80),
+
       note: words.length < 10
-        ? 'لم نجد 10 كلمات في القاموس لهذه الشبكة.'
-        : 'تم التحقق من اتصال المسارات على الحروف المقروءة، وقبول اللعبة غير مضمون.'
+        ? 'لم أجد 10 كلمات متصلة في هذه الشبكة؛ جرّب صورة أوضح.'
+        : 'تم التحقق من اتصال الحروف؛ قبول الكلمات داخل اللعبة غير مضمون.'
     });
 
   } catch (err) {
-    return send(
+    return reply(
       err.name === 'AbortError' ? 504 : 422,
       {
         error: err.name === 'AbortError'
-          ? 'تجاوزت قراءة الصورة 9 ثوان؛ ارفع لقطة شاشة مباشرة وأصغر.'
+          ? 'انتهت مهلة قراءة الصورة (8.8 ثوانٍ)؛ جرّب صورة أصغر.'
           : err.message
       }
     );
