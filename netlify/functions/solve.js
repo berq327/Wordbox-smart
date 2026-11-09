@@ -4,15 +4,154 @@
 const HEADERS = {
   'Content-Type': 'application/json; charset=utf-8',
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type'
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS'
 };
 
-const send = (statusCode, data) => ({
-  statusCode,
-  headers: HEADERS,
-  body: JSON.stringify(data)
-});
+function reply(statusCode, data) {
+  return {
+    statusCode,
+    headers: HEADERS,
+    body: JSON.stringify(data)
+  };
+}
+
+// قاموس مساعد، والذكاء الاصطناعي
+// يستطيع اقتراح كلمات من خارجه.
+const DICTIONARY = `
+سلام كلام كتاب كاتب كتب مكتب مكتبة كلمة كلمات
+ملك ملكة ملكي ملوك مالك ملكات
+بلد بلاد بلدي بلاط طلب طالب طلبت طلاب
+بطل بطلة طبل طبلة طبول
+طيب طيبة طبخ طبخة طباخ مطبخ
+اكل اكلت اكلة شرب شربت شراب شارب
+لبن لبنة لبس لباس لابس لحم لحمة ملح
+نهر نهار بحر بحار جبل جبال جمل جمال
+جميل جميلة جملة نجم نجمة نجوم
+نبه نبهت تنبه منبه نبذ نبذل نبت نبات
+هبط ذهب ذهبت ذهبي بذل بذرة ذنب ذنوب
+خجل خبير خبر خبرة خمن خمنت
+خدم خدمت خادم خدمة خرج خرجت خروج
+دخل دخلت دخول داخل مدخل
+خلط خليط خلطة خلص خلاص خال خالة
+شتم شتمت شتمه شمل شامل شمال
+شمس شمعة شموع شجر شجرة
+شعر شاعر شعور شعاع شوق
+شكر شكرت شاكر شكور شرح شرحت
+شارع شرع شرط شرطة شريط
+شرب شربت شارب شراب
+صبر صبرت صابر صبور صمت صامت
+سكت سكتت ساكت سكوت صوت صوتي
+صورة صور صيام صائم صلاة
+صدق صادق صديق صاحب صحبة صحة
+صحن صدمة صنع صنعت صانع صنعة
+صغير صغيرة قصير قصيرة قصر قصور
+قمر قمري قلب قلبي قلبك قلوب
+قول قال قالت قائل مقال مقالة
+قرار قرية قريب قريبة كريم كريمة
+كرم كبير كبيرة كبر كبرت
+كسر كسرت كاسب كسب كسبت
+كلم كلمة كلام كتاب كتابي كاتب
+كتب كتبت مكتب مكاتب
+كلب كلبة كلاب كرة كرات كرسي
+ليل ليلة ليالي لون لوني لونك
+لعب لعبة لعبت لاعب ملعب
+لبن لبنة لبس لباس لابس ملابس
+علم علوم علامة معلم معلمة
+تعلم تعلمت تعليم عمل عملي عامل
+عمال عميل عمر عمري عمارة
+عنب عنبة عين عيني عينك عيب عيوب
+عيش عائلة عادل عدالة عادي عادة
+عاد عادت عودة عدد عداد
+عذاب عذب علاج عظيم عظم عظام
+غالي غالية غريب غريبة غربة غرب
+غزال غابة غيم غيمة غياب غائب
+غناء غسل غسلت غنم
+فاز فازت فوز فائز فكر فكرة
+فتح فتحت فاتح فتى فتاة
+فقير فقيرة فرح فرحت فرحة
+فرصة فرص فرد فرض فصل فصول
+فعل فعلت فهم فهمت فاهم
+فائدة مفيد فضل فضاء فضة فيل
+قفل قلق قلم اقلام قدم قدمت
+قديم قديمة قدر قدرت قادر
+قيمة قيم قوي قوية قوة
+قام قامت قائم قصص قصة
+قطع قطعت قطعة طعام طعم مطعم
+طائر طائرة طار طارت طيور
+طريق طرق طارق طين طينة
+طفل طفلة طاقة طبقة طبع
+حبر حبل حبال حب حبيب حبيبة
+حبة حبات حياة حيوان حديقة
+حدود حديث حديد جديد جديدة
+حلو حلوة حلم حلمت احلام
+حمل حملت حامل حمار حماس
+حارس حرس حرب حروب حرف حروف
+حساب حسب حسبت حسن حصان
+ربح ربحت رابح ربيع ريح رياح
+رمل رمال رمي رميت رامي
+راس رأس رئيس رسم رسمت رسام
+رسوم رسمي رسالة رصيد
+رضا رضيت رجل رجال رجلي
+ركض ركضت ركب ركبت ركوب
+رقم رقمي رقبة روضة
+رائع رائعة ورد وردة ورود
+ورق ورقة وزن وزير وزارة
+وسط وصل وصلت وعد وعدت
+وجد وجدت وجه وجهة
+ولد ولدي ولادة والد والدة
+وقت وقف وقفت يوم يومي
+سنة سنين شهر شهور اسبوع
+ساعة ساعات مساء صباح
+بداية بدأ بدأت بديل بعيد
+قرب قريب قريبة بعد عودة
+نزل نزلت منزل منازل
+مدينة مدن مكان مساحة
+مسح مسحت سكن سكنت ساكن
+سيارة سير سافر سفر سفينة
+درس درست دروس دراسة
+مدرس مدرسة مدارس نجاح نجح
+نجحت خسارة خسر خسرت
+تجارة تاجر تجار متجر
+سعر اسعار رخيص شراء
+بيع باع باعت بائع مال مالي
+نقد نقود نقش نقشت
+هاتف جهاز شاشة شبكة
+صندوق صحيفة باب ابواب
+بيت بيتي بيتك بيوت بنا بناء
+بنت بنات ابناء ابن ابني
+ابي امي امك اخ اخي اخت اختي
+اهل اهلي ناس انسان نساء
+نسمة نسيم نسي نسيت
+ذكر ذكرت ذاكر ذكرى
+زمن زمان حاضر حضور ماضي
+سابق لاحق جديد قديم
+اول اولى ثاني ثانية ثالث رابع
+خامس سادس سابع ثامن تاسع
+واحد واحدة ثلاثة اربع خمسة
+ستة سبعة ثمانية تسعة عشرة
+شمال جنوب شرق غرب يمين يسار
+وسط فوق تحت خلف امام
+جانب حول داخل خارج
+طويل طويلة قصير قصيرة
+كبير كبيرة صغير صغيرة
+سريع سريعة بطيء بطيئة
+قوي قوية ضعيف ضعيفة
+صعب صعبة سهل سهلة
+جميل جميلة نظيف نظيفة
+نظر نظرت ناظر واضح واضحة
+صحيح صحيحة خطأ غلط
+ممكن قادر اكيد افضل احسن
+اكثر اقل كثير كثيرة قليل قليلة
+حقيقي حقيقة صدق صادق
+صالح صالحة فرح فرحة
+سعيد سعيدة حزين حزينة
+حزن خوف خاف خافت
+امن امان امين امينة
+حلم احلام شوق قلب
+محبة محبوب حبيب ورد
+نجاة ناجح نجاح نجا
+`.trim().split(/\s+/u);
 
 function normalize(value) {
   return String(value || '')
@@ -22,44 +161,51 @@ function normalize(value) {
     .replace(/ى/g, 'ي');
 }
 
-// فحص اتصال الحروف دون عرض المسارات
-function isConnectedWord(word, grid) {
+// التأكد أن الكلمة من 3 إلى 5 حروف
+// وأن كل حرف متصل بالحرف الذي قبله.
+function pathExists(word, grid) {
   const chars = [...normalize(word)];
 
-  if (chars.length < 3 || chars.length > 16) {
+  if (chars.length < 3 || chars.length > 5) {
     return false;
   }
 
   const cells = grid.map(normalize);
-  const failed = new Set();
 
-  function search(index, at, used) {
-    if (at === chars.length) return true;
-
-    const state = `${index},${at},${used}`;
-    if (failed.has(state)) return false;
+  function walk(position, index, used) {
+    if (index === chars.length) {
+      return true;
+    }
 
     for (let next = 0; next < 16; next++) {
       if (used & (1 << next)) continue;
-      if (cells[next] !== chars[at]) continue;
 
-      if (index !== -1) {
-        const dr = Math.abs(
+      if (cells[next] !== chars[index]) {
+        continue;
+      }
+
+      if (position !== -1) {
+        const rowDistance = Math.abs(
           Math.floor(next / 4) -
-          Math.floor(index / 4)
+          Math.floor(position / 4)
         );
 
-        const dc = Math.abs(
-          (next % 4) - (index % 4)
+        const colDistance = Math.abs(
+          (next % 4) - (position % 4)
         );
 
-        if (dr > 1 || dc > 1) continue;
+        if (
+          rowDistance > 1 ||
+          colDistance > 1
+        ) {
+          continue;
+        }
       }
 
       if (
-        search(
+        walk(
           next,
-          at + 1,
+          index + 1,
           used | (1 << next)
         )
       ) {
@@ -67,48 +213,36 @@ function isConnectedWord(word, grid) {
       }
     }
 
-    failed.add(state);
     return false;
   }
 
-  return search(-1, 0, 0);
+  return walk(-1, 0, 0);
 }
 
-// التعامل مع رد الذكاء الاصطناعي
-function parseModelOutput(content) {
+function parseAI(text) {
   try {
-    return JSON.parse(content);
+    return JSON.parse(text);
   } catch (_) {
-    const gridMatch = content.match(
+    const match = text.match(
       /"grid"\s*:\s*(\[[^\]]*\])/
     );
 
-    if (!gridMatch) {
+    if (!match) {
       throw new Error(
-        'قراءة الحروف لم تكتمل. جرّب صورة أصغر.'
+        'لم تكتمل قراءة الحروف. حاول مرة أخرى.'
       );
     }
 
-    let grid;
+    const grid = JSON.parse(match[1]);
 
-    try {
-      grid = JSON.parse(gridMatch[1]);
-    } catch (_) {
-      throw new Error(
-        'قراءة الحروف لم تكتمل. أعد المحاولة.'
-      );
-    }
-
-    const wordsSection = content.match(
+    const wordSection = text.match(
       /"words"\s*:\s*\[([\s\S]*)/
     );
 
-    const words = wordsSection
-      ? [
-          ...wordsSection[1].matchAll(
-            /"([\u0621-\u064A]{3,16})"/gu
-          )
-        ].map(x => x[1])
+    const words = wordSection
+      ? [...wordSection[1].matchAll(
+          /"([\u0621-\u064A]{3,5})"/gu
+        )].map(x => x[1])
       : [];
 
     return {grid, words};
@@ -117,33 +251,27 @@ function parseModelOutput(content) {
 
 exports.handler = async event => {
   if (event.httpMethod === 'OPTIONS') {
-    return send(200, {});
+    return reply(200, {});
   }
 
   if (event.httpMethod !== 'POST') {
-    return send(405, {
+    return reply(405, {
       error: 'POST only'
     });
   }
 
   if (!process.env.OPENAI_API_KEY) {
-    return send(503, {
-      error: 'مفتاح OPENAI_API_KEY غير موجود'
+    return reply(503, {
+      error: 'مفتاح OpenAI غير موجود'
     });
   }
 
   let timer;
 
   try {
-    let body;
-
-    try {
-      body = JSON.parse(event.body || '{}');
-    } catch (_) {
-      return send(400, {
-        error: 'بيانات الصورة غير صحيحة'
-      });
-    }
+    const body = JSON.parse(
+      event.body || '{}'
+    );
 
     const image = body.image;
 
@@ -152,55 +280,54 @@ exports.handler = async event => {
       !/^data:image\/(png|jpeg|webp);base64,/i.test(image) ||
       image.length > 7500000
     ) {
-      return send(400, {
-        error: 'ارفع صورة واضحة وأصغر حجمًا'
+      return reply(400, {
+        error: 'الصورة غير صالحة أو كبيرة'
       });
     }
 
     const controller = new AbortController();
 
-    // مهلة التحليل 10 ثوانٍ
     timer = setTimeout(
       () => controller.abort(),
       10000
     );
 
-    // تحليل الصورة والكلمات دون قاموس ثابت
     const prompt = `
-أنت خبير بحل لعبة Wordbox العربية.
+اقرأ صورة لعبة Wordbox العربية.
 
-انظر للصورة واقرأ شبكة الحروف 4×4 فقط.
+حدد شبكة 4×4 المكونة من 16 حرفًا.
 
-لا تقرأ كلمة الجولة أو أسماء اللاعبين
-أو النصوص خارج الدوائر.
+تجاهل أسماء اللاعبين والنصوص
+خارج شبكة اللعبة.
 
-أرجع JSON فقط بمفتاحين بالترتيب:
+أعد JSON فقط بالشكل:
 
-"grid":
-مصفوفة 16 حرفًا، صفوفًا من الأعلى
-للأسفل، وكل صف من يسار الصورة
-إلى يمينها.
+{
+ "grid": ["16 حرفًا منفصلًا"],
+ "words": ["كلمات عربية"]
+}
 
-"words":
-مصفوفة من 30 إلى 35 كلمة عربية
-حقيقية محتملة من حروف الشبكة نفسها.
+رتب الحروف من يسار الصورة إلى يمينها
+صفًا صفًا، من الأعلى إلى الأسفل.
 
-فكّر في كلمات قصيرة وطويلة:
-3 و4 و5 و6 و7 أحرف،
-وأطول إن وجدت.
+اقترح حتى 30 كلمة عربية حقيقية
+من 3 أو 4 أو 5 حروف فقط.
 
-الحروف متجاورة أفقيًا أو عموديًا
-أو قطريًا، ولا تستخدم الخانة نفسها
-مرتين في الكلمة.
+اكتشف كلمات متنوعة:
+أسماء، أفعال، صفات وتصريفات.
 
-نوّع بين الأسماء والأفعال والصفات،
-ولا تكرر الكلمات.
+يمكن اقتراح كلمات غير شائعة،
+لكن لا تخترع كلمات بلا معنى.
 
-أعطِ الأولوية للكلمات الشائعة،
-ولا تضف أي حروف من خارج الشبكة.
+كل حرف في الكلمة يجب أن يكون
+مجاورًا للحرف السابق أفقيًا
+أو رأسيًا أو قطريًا.
 
-لا تكتب مسارات ولا إحداثيات
-ولا شرحًا، فقط JSON.
+لا تستخدم نفس الخانة مرتين.
+
+لا تكتب مسارات ولا شروحات.
+
+أهم شيء قراءة grid بدقة.
 `;
 
     const response = await fetch(
@@ -216,7 +343,7 @@ exports.handler = async event => {
         body: JSON.stringify({
           model: 'gpt-4.1-mini',
           temperature: 0,
-          max_tokens: 1050,
+          max_tokens: 850,
           response_format: {
             type: 'json_object'
           },
@@ -240,15 +367,15 @@ exports.handler = async event => {
       }
     );
 
-    const apiText = await response.text();
+    const rawText = await response.text();
 
     let api;
 
     try {
-      api = JSON.parse(apiText);
+      api = JSON.parse(rawText);
     } catch (_) {
       throw new Error(
-        'خدمة التحليل أرجعت ردًا غير مكتمل'
+        'رد خدمة الصور غير مكتمل'
       );
     }
 
@@ -262,61 +389,60 @@ exports.handler = async event => {
     const content =
       api.choices?.[0]?.message?.content;
 
-    if (
-      typeof content !== 'string' ||
-      !content.trim()
-    ) {
+    if (!content) {
       throw new Error(
-        'لم تصل نتيجة تحليل الصورة'
+        'لم تصل نتيجة من الذكاء الاصطناعي'
       );
     }
 
-    const parsed = parseModelOutput(content);
+    const parsed = parseAI(content);
 
     if (
       !Array.isArray(parsed.grid) ||
       parsed.grid.length !== 16
     ) {
       throw new Error(
-        'لم أتمكن من قراءة الحروف الـ16'
+        'لم يتم التعرف على الحروف الـ16'
       );
     }
 
     const grid = parsed.grid.map(
-      value => String(value || '').trim()
+      x => String(x || '').trim()
     );
 
     if (
       grid.some(
-        value =>
-          [...value].length !== 1 ||
-          !/^[\u0621-\u064A]$/u.test(value)
+        x =>
+          [...x].length !== 1 ||
+          !/^[\u0621-\u064A]$/u.test(x)
       )
     ) {
       throw new Error(
-        'بعض الحروف غير واضحة. جرّب لقطة شاشة مباشرة.'
+        'بعض الحروف غير واضحة'
       );
     }
+
+    const aiWords = Array.isArray(parsed.words)
+      ? parsed.words
+      : [];
+
+    const candidates = [
+      ...aiWords,
+      ...DICTIONARY
+    ];
 
     const seen = new Set();
     const words = [];
 
-    const candidates = Array.isArray(parsed.words)
-      ? parsed.words
-      : [];
-
     for (const item of candidates) {
       const word = String(item || '')
         .trim()
-        .replace(
-          /[\u064B-\u065F\u0670\u0640]/g,
-          ''
-        );
+        .replace(/[\u064B-\u065F\u0670\u0640]/g, '');
 
       const key = normalize(word);
 
       if (
-        !/^[\u0621-\u064A]{3,16}$/u.test(word) ||
+        !/^[\u0621-\u064A]{3,5}$/u.test(word) ||
         seen.has(key)
       ) {
         continue;
@@ -324,28 +450,31 @@ exports.handler = async event => {
 
       seen.add(key);
 
-      if (isConnectedWord(word, grid)) {
+      if (pathExists(word, grid)) {
         words.push({word});
       }
-
-      // عرض 15 كلمة فقط
-      if (words.length === 15) break;
     }
 
-    return send(200, {
+    // عرض الكلمات الأطول أولًا
+    words.sort(
+      (a, b) =>
+        [...b.word].length -
+        [...a.word].length ||
+        a.word.localeCompare(b.word, 'ar')
+    );
+
+    return reply(200, {
       grid,
-      words,
-      note: words.length < 15
-        ? 'عُرضت الكلمات التي أمكن التحقق من اتصال حروفها فقط.'
-        : 'تم العثور على 15 كلمة متصلة الحروف.'
+      words: words.slice(0, 10),
+      note: 'تم التحقق من اتصال الحروف'
     });
 
   } catch (error) {
-    return send(
+    return reply(
       error.name === 'AbortError' ? 504 : 422,
       {
         error: error.name === 'AbortError'
-          ? 'انتهت مهلة قراءة الصورة (10 ثوانٍ). جرّب صورة أصغر.'
+          ? 'انتهت مهلة التحليل (10 ثوانٍ). حاول بصورة أصغر.'
           : error.message
       }
     );
