@@ -176,6 +176,7 @@ const normalize = value => String(value)
 
 function findPath(word, grid) {
   const chars = [...normalize(word)];
+
   if (chars.length !== 4 && chars.length !== 5) {
     return null;
   }
@@ -251,10 +252,10 @@ exports.handler = async event => {
 
     const controller = new AbortController();
 
-    // نفس مهلة التحليل السابقة
+    // مهلة قراءة الصورة: 10 ثوانٍ
     timer = setTimeout(
       () => controller.abort(),
-      8800
+      10000
     );
 
     const prompt = `
@@ -301,8 +302,6 @@ left,right,top,bottom.
         body: JSON.stringify({
           model: 'gpt-4.1-mini',
           temperature: 0,
-
-          // زيادة مساحة الكلمات في الرد
           max_tokens: 1300,
 
           response_format: {
@@ -388,7 +387,6 @@ left,right,top,bottom.
     const words = [];
     const seen = new Set();
 
-    // الجمع بين كلمات الذكاء الاصطناعي والقاموس
     const candidates = [
       ...(Array.isArray(parsed.candidates)
         ? parsed.candidates
@@ -413,7 +411,6 @@ left,right,top,bottom.
 
       seen.add(key);
 
-      // لا تعرض كلمة بلا مسار متصل
       const path = findPath(word, grid);
 
       if (path) {
@@ -430,8 +427,6 @@ left,right,top,bottom.
     return reply(200, {
       grid,
       bounds: validBounds ? bounds : null,
-
-      // السماح بعرض حتى 80 كلمة
       words: words.slice(0, 80),
 
       note: words.length < 10
@@ -444,7 +439,7 @@ left,right,top,bottom.
       err.name === 'AbortError' ? 504 : 422,
       {
         error: err.name === 'AbortError'
-          ? 'انتهت مهلة قراءة الصورة (8.8 ثوانٍ)؛ جرّب صورة أصغر.'
+          ? 'انتهت مهلة قراءة الصورة (10 ثوانٍ)؛ جرّب صورة أصغر.'
           : err.message
       }
     );
