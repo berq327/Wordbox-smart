@@ -16,8 +16,7 @@ function reply(statusCode, data) {
   };
 }
 
-// قاموس مساعد، والذكاء الاصطناعي
-// يستطيع اقتراح كلمات من خارجه.
+// نفس القاموس السابق بدون تغيير
 const DICTIONARY = `
 سلام كلام كتاب كاتب كتب مكتب مكتبة كلمة كلمات
 ملك ملكة ملكي ملوك مالك ملكات
@@ -161,12 +160,11 @@ function normalize(value) {
     .replace(/ى/g, 'ي');
 }
 
-// التأكد أن الكلمة من 3 إلى 5 حروف
-// وأن كل حرف متصل بالحرف الذي قبله.
+// التغيير: قبول 4 أو 5 أو 6 حروف فقط
 function pathExists(word, grid) {
   const chars = [...normalize(word)];
 
-  if (chars.length < 3 || chars.length > 5) {
+  if (chars.length < 4 || chars.length > 6) {
     return false;
   }
 
@@ -241,7 +239,7 @@ function parseAI(text) {
 
     const words = wordSection
       ? [...wordSection[1].matchAll(
-          /"([\u0621-\u064A]{3,5})"/gu
+          /"([\u0621-\u064A]{4,6})"/gu
         )].map(x => x[1])
       : [];
 
@@ -311,7 +309,7 @@ exports.handler = async event => {
 صفًا صفًا، من الأعلى إلى الأسفل.
 
 اقترح حتى 30 كلمة عربية حقيقية
-من 3 أو 4 أو 5 حروف فقط.
+من 4 أو 5 أو 6 حروف فقط.
 
 اكتشف كلمات متنوعة:
 أسماء، أفعال، صفات وتصريفات.
@@ -442,7 +440,7 @@ exports.handler = async event => {
       const key = normalize(word);
 
       if (
-        !/^[\u0621-\u064A]{3,5}$/u.test(word) ||
+        !/^[\u0621-\u064A]{4,6}$/u.test(word) ||
         seen.has(key)
       ) {
         continue;
@@ -455,7 +453,7 @@ exports.handler = async event => {
       }
     }
 
-    // عرض الكلمات الأطول أولًا
+    // نفس ترتيب الكلمات السابق
     words.sort(
       (a, b) =>
         [...b.word].length -
